@@ -7,24 +7,24 @@ This document contains the complete checklist of development tasks for TeXForge.
 ## Phase 1 — Audit and Stabilization
 - [x] Restore or clone the actual Git repository
 - [x] Verify remote (`git remote -v`), branch, and active baseline commit
-- [ ] Create dedicated development branch
-- [ ] Inspect `.gitignore`, `.env`, `.env.example` and verify no credentials or secrets are committed
-- [ ] Install Rust toolchain with rustup
-- [ ] Verify rustc and cargo versions
-- [ ] Verify macOS Tauri prerequisites
-- [ ] Verify compatible Tauri CLI
-- [ ] Capture source-reference baseline in `IMPLEMENTATION_PLAN_V3.md` before implementation decisions are treated as final
-- [ ] Run baseline frontend commands
-- [ ] Record all command outputs in `IMPLEMENTATION_STATUS.md`
+- [x] Create dedicated development branch
+- [x] Inspect `.gitignore`, `.env`, `.env.example` and verify no credentials or secrets are committed
+- [x] Install Rust toolchain with rustup
+- [x] Verify rustc and cargo versions
+- [x] Verify macOS Tauri prerequisites
+- [x] Verify compatible Tauri CLI
+- [x] Capture source-reference baseline in `IMPLEMENTATION_PLAN_V3.md` before implementation decisions are treated as final
+- [x] Run baseline frontend commands
+- [x] Record all command outputs in `IMPLEMENTATION_STATUS.md`
 - [x] Perform codebase documentation audit and verify Monaco npm imports vs PDF.js CDN worker in [AUDIT.md](AUDIT.md)
 - [x] Clarify `src/state/db.ts` legacy IndexedDB export adapter role (TypeScript browser export only)
-- [ ] Configure strict TypeScript parameters in `tsconfig.json` and fix compiling errors
-- [ ] Separate `npm run lint` into `npm run typecheck` and `npm run lint` scripts
-- [ ] Install `react-router-dom` and `jszip`
-- [ ] Initialize Tauri 2 project structure (`src-tauri/` directory)
-- [ ] Configure minimal Tauri capabilities in `src-tauri/capabilities/default.json` and reference them explicitly from `tauri.conf.json`
-- [ ] Verify React has no general filesystem or shell plugin surface; all project file operations and compiler launches are Rust-owned
-- [ ] Remove active Express server dependency from default packaged execution paths
+- [x] Configure strict TypeScript parameters in `tsconfig.json` and fix compiling errors
+- [x] Separate `npm run lint` into `npm run typecheck` and `npm run lint` scripts
+- [x] Install `react-router-dom` and `jszip`
+- [x] Initialize Tauri 2 project structure (`src-tauri/` directory)
+- [x] Configure minimal Tauri capabilities in `src-tauri/capabilities/default.json` and reference them explicitly from `tauri.conf.json`
+- [x] Verify React has no general filesystem or shell plugin surface; all project file operations and compiler launches are Rust-owned
+- [x] Remove active Express server dependency from default packaged execution paths
 - [x] Fix all Mermaid diagrams syntax and verify that every block renders successfully
 - [x] Verify no Markdown headings are contained inside SQL code fences
 - [x] Perform final documentation consistency check
