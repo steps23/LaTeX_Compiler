@@ -3,14 +3,20 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+const _ResizeObserver = window.ResizeObserver;
+window.ResizeObserver = class ResizeObserver extends _ResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    super((entries, observer) => {
+      window.requestAnimationFrame(() => {
+        callback(entries, observer);
+      });
+    });
+  }
+};
+
 // Suppress harmless ResizeObserver errors
 window.addEventListener('error', (e) => {
   if (e.message.includes('ResizeObserver') || e.message.includes('undelivered notifications')) {
-    const resizeObserverErrDiv = document.getElementById('webpack-dev-server-client-overlay-div');
-    const viteOverlay = document.getElementById('vite-error-overlay');
-    if (viteOverlay) {
-        viteOverlay.remove();
-    }
     e.stopImmediatePropagation();
     e.preventDefault();
   }
