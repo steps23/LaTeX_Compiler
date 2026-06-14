@@ -4,7 +4,7 @@ test('parses basic error lines', () => {
   const sampleLog = `This is pdfTeX, Version 3.141592653-2.6-1.40.24 (TeX Live 2022)
 entering extended mode
 ! Undefined control sequence.
-l.12 \\badcommand
+l.12 \badcommand
 
 ? `;
 
