@@ -7,6 +7,18 @@ import * as monaco from "monaco-editor";
 
 let mockEditorInstance: Record<string, ReturnType<typeof vi.fn>>;
 
+function createMockViewState(): monaco.editor.ICodeEditorViewState {
+  return {
+    cursorState: [],
+    viewState: {
+      firstPosition: { lineNumber: 1, column: 1 },
+      firstPositionDeltaTop: 0,
+      scrollLeft: 0,
+    },
+    contributionsState: {},
+  };
+}
+
 // Mock Monaco
 vi.mock("@monaco-editor/react", async () => {
   const React = await import("react");
@@ -17,28 +29,30 @@ vi.mock("@monaco-editor/react", async () => {
 
   const Editor = ({
     onMount,
-    path,
   }: {
     onMount?: (editor: unknown) => void;
     path: string;
     value?: string;
   }) => {
+    // Monaco editor persists across file (path) changes
     React.useEffect(() => {
+      mockEditorInstance = {
+        saveViewState: vi.fn().mockReturnValue(null),
+        restoreViewState: vi.fn(),
+        revealLineInCenter: vi.fn(),
+        setPosition: vi.fn(),
+        setScrollTop: vi.fn(),
+        focus: vi.fn(),
+        onDidChangeCursorPosition: vi
+          .fn()
+          .mockReturnValue({ dispose: vi.fn() }),
+        onDidScrollChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+
       if (onMount) {
-        mockEditorInstance = {
-          saveViewState: vi.fn().mockReturnValue(null),
-          restoreViewState: vi.fn(),
-          revealLineInCenter: vi.fn(),
-          setPosition: vi.fn(),
-          focus: vi.fn(),
-          onDidChangeCursorPosition: vi
-            .fn()
-            .mockReturnValue({ dispose: vi.fn() }),
-          onDidScrollChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-        };
         onMount(mockEditorInstance);
       }
-    }, [path, onMount]); // Re-mount if path changes for our mock
+    }, [onMount]);
 
     return <div data-testid="mock-editor">Mock Editor</div>;
   };
@@ -123,11 +137,7 @@ describe("MonacoEditorRenderer", () => {
       openFiles: ["f1", "f2"],
       activeFileId: "f1",
       editorViewStates: {
-        f1: {
-          cursorState: [],
-          viewState: {},
-          contributionsState: {},
-        } as unknown as monaco.editor.ICodeEditorViewState,
+        f1: createMockViewState(),
       },
     });
 

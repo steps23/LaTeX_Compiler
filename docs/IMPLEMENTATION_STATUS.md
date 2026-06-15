@@ -14,8 +14,9 @@
 - [x] Risolto Type error su Monaco in `MonacoEditor.test.tsx` e file accessori.
 - [x] Sistemato ESLint e rimozione di errori suppressi in `PdfViewer.tsx`, `main.tsx`, `index.html`.
 - [x] Ripulito codice morto (es. variabili non utilizzate).
-- [x] Rimozione caricamenti via CDN per Monaco, adozione pura di Worker build integrati.
-- [x] Rimossi global suppressions per ResizeObserver in `main.tsx` e `index.html`.
+- [x] Sostituito caricamenti via CDN per Monaco, adozione pura di Worker build integrati.
+- [x] Rimossi global suppressions per ResizeObserver.
+- [x] Corretti difetti di lifecycle, URL Objects leak, reset stato asincrono illegale e re-introdotti strict mode typechecks.
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 

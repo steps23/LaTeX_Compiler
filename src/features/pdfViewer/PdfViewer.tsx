@@ -13,14 +13,23 @@ export function PdfViewer() {
   const [totalPages, setTotalPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [prevBytes, setPrevBytes] = useState<Uint8Array | undefined>(
+    compileResult?.pdfBytes,
+  );
+
+  if (compileResult?.pdfBytes !== prevBytes) {
+    setPrevBytes(compileResult?.pdfBytes);
+    setPdfDoc(null);
+    setTotalPages(0);
+    setPageNumber(1);
+    setRenderError(null);
+  }
 
   // Load PDF Document only when bytes change
   useEffect(() => {
     let isMounted = true;
+
     if (!compileResult?.pdfBytes || compileResult.pdfBytes.length === 0) {
-      Promise.resolve().then(() => {
-        if (isMounted) setPdfDoc(null);
-      });
       return;
     }
 
@@ -31,7 +40,6 @@ export function PdfViewer() {
         if (isMounted) {
           setPdfDoc(doc);
           setTotalPages(doc.numPages);
-          setRenderError(null);
         }
       })
       .catch((err: unknown) => {
@@ -79,9 +87,9 @@ export function PdfViewer() {
 
         const renderContext = {
           canvasContext: context,
-          transform: (transform || undefined) as number[] | undefined,
+          transform: transform || undefined,
           viewport: viewport,
-        } as unknown as Parameters<typeof page.render>[0];
+        } as Parameters<typeof page.render>[0];
 
         if (renderTask) {
           renderTask.cancel();

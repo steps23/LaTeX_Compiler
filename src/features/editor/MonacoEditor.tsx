@@ -3,9 +3,7 @@ import { useEditorStore } from "../../state/store";
 import { X, File } from "lucide-react";
 import Editor, { OnMount, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-// @ts-expect-error missing type for worker
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-// @ts-expect-error missing type for worker
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
 import { FileNode } from "../../types";
@@ -21,6 +19,45 @@ self.MonacoEnvironment = {
 };
 loader.config({ monaco });
 
+function BlobViewer({ blob, name }: { blob: Blob; name: string }) {
+  const [url] = useState(() => URL.createObjectURL(blob));
+
+  useEffect(() => {
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [url]);
+
+  const isImage = name.match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
+  if (isImage && url) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950/50">
+        <img
+          src={url}
+          alt={name}
+          className="max-w-full max-h-full object-contain drop-shadow-xl"
+        />
+        <div className="mt-4 text-zinc-500 font-mono text-xs">
+          {name} • {(blob.size / 1024).toFixed(1)} KB
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950/50">
+      <File className="w-16 h-16 text-zinc-600 mb-4" />
+      <div className="text-zinc-300 font-medium mb-1">{name}</div>
+      <div className="text-zinc-500 text-sm">
+        Binary file preview not supported.
+      </div>
+      <div className="mt-4 text-zinc-500 font-mono text-xs">
+        {(blob.size / 1024).toFixed(1)} KB
+      </div>
+    </div>
+  );
+}
+
 export function MonacoEditorRenderer() {
   const {
     files,
@@ -30,23 +67,16 @@ export function MonacoEditorRenderer() {
     openFiles,
     setActiveFile,
     closeFileAndTab,
-    editorViewStates,
-    setEditorViewState,
   } = useEditorStore();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const disposablesRef = useRef<{ dispose: () => void }[]>([]);
-  const activeFileIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    activeFileIdRef.current = activeFileId;
-  }, [activeFileId]);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const openFileNodes = openFiles
     .map((id) => files.find((f) => f.id === id))
     .filter(Boolean) as FileNode[];
 
-  const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
+  const previousFileIdRef = useRef<string | null>(activeFileId);
 
   useEffect(() => {
     if (editorRef.current && activeLine) {
@@ -55,31 +85,6 @@ export function MonacoEditorRenderer() {
       editorRef.current.focus();
     }
   }, [activeLine, activeFileId]);
-
-  useEffect(() => {
-    let currentUrl: string | null = null;
-    let isMounted = true;
-
-    Promise.resolve().then(() => {
-      if (activeFile && activeFile.blob) {
-        currentUrl = URL.createObjectURL(activeFile.blob);
-        if (isMounted) {
-          setImageViewUrl(currentUrl);
-        }
-      } else {
-        if (isMounted) {
-          setImageViewUrl(null);
-        }
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl);
-      }
-    };
-  }, [activeFile]);
 
   useEffect(() => {
     return () => {
@@ -91,29 +96,32 @@ export function MonacoEditorRenderer() {
   const handleEditorMount: OnMount = (editor) => {
     editorRef.current = editor;
 
-    // Clean up previous listeners if remounting
     disposablesRef.current.forEach((d) => d.dispose());
     disposablesRef.current = [];
 
-    // Restore state
-    if (activeFileIdRef.current) {
-      const state = editorViewStates[activeFileIdRef.current];
+    const currentId = useEditorStore.getState().activeFileId;
+    if (currentId) {
+      const state = useEditorStore.getState().editorViewStates[currentId];
       if (state) {
         editor.restoreViewState(state);
       }
     }
 
-    if (activeLine) {
-      editor.revealLineInCenter(activeLine);
-      editor.setPosition({ lineNumber: activeLine, column: 1 });
+    if (useEditorStore.getState().activeLine) {
+      editor.revealLineInCenter(useEditorStore.getState().activeLine!);
+      editor.setPosition({
+        lineNumber: useEditorStore.getState().activeLine!,
+        column: 1,
+      });
       editor.focus();
     }
 
     const saveViewState = () => {
-      const currentId = activeFileIdRef.current;
-      if (currentId) {
-        const state = editor.saveViewState();
-        setEditorViewState(currentId, state);
+      const id = useEditorStore.getState().activeFileId;
+      if (id) {
+        useEditorStore
+          .getState()
+          .setEditorViewState(id, editor.saveViewState() || null);
       }
     };
 
@@ -123,57 +131,41 @@ export function MonacoEditorRenderer() {
     disposablesRef.current.push(editor.onDidScrollChange(saveViewState));
   };
 
-  // Whenever we switch active files but KEEP the same editor instance,
-  // onMount isn't called again. So we need to handle restoring view state purely on activeFileId change.
   useEffect(() => {
-    if (editorRef.current && activeFileId) {
-      const state = editorViewStates[activeFileId];
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const prevId = previousFileIdRef.current;
+    if (prevId && prevId !== activeFileId) {
+      useEditorStore
+        .getState()
+        .setEditorViewState(prevId, editor.saveViewState() || null);
+    }
+
+    if (activeFileId && activeFileId !== prevId) {
+      const state = useEditorStore.getState().editorViewStates[activeFileId];
       if (state) {
-        editorRef.current.restoreViewState(state);
+        editor.restoreViewState(state);
+      } else {
+        // Reset view state safely for null or missing state
+        editor.setScrollTop(0);
+        editor.setPosition({ lineNumber: 1, column: 1 });
       }
     }
-  }, [activeFileId, editorViewStates]);
 
-  if (!activeFile && openFiles.length === 0) {
-    return (
-      <div className="w-full h-full bg-zinc-950 flex shadow-inner flex-col text-zinc-500 items-center justify-center">
-        Select a file to start editing.
-      </div>
-    );
-  }
+    previousFileIdRef.current = activeFileId;
+  }, [activeFileId]);
 
   const renderContent = () => {
     if (!activeFile) return null;
 
     if (activeFile.blob) {
-      const isImage = activeFile.name.match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
-      if (isImage && imageViewUrl) {
-        return (
-          <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950/50">
-            <img
-              src={imageViewUrl}
-              alt={activeFile.name}
-              className="max-w-full max-h-full object-contain drop-shadow-xl"
-            />
-            <div className="mt-4 text-zinc-500 font-mono text-xs">
-              {activeFile.name} • {(activeFile.blob.size / 1024).toFixed(1)} KB
-            </div>
-          </div>
-        );
-      }
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950/50">
-          <File className="w-16 h-16 text-zinc-600 mb-4" />
-          <div className="text-zinc-300 font-medium mb-1">
-            {activeFile.name}
-          </div>
-          <div className="text-zinc-500 text-sm">
-            Binary file preview not supported.
-          </div>
-          <div className="mt-4 text-zinc-500 font-mono text-xs">
-            {(activeFile.blob.size / 1024).toFixed(1)} KB
-          </div>
-        </div>
+        <BlobViewer
+          key={activeFile.id}
+          blob={activeFile.blob}
+          name={activeFile.name}
+        />
       );
     }
 

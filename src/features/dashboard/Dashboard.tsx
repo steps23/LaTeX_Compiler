@@ -46,21 +46,30 @@ export function Dashboard() {
     null,
   );
 
-  const loadProjects = async () => {
-    setLoading(true);
-    try {
-      const result = await ProjectService.getAllProjectsWithStats();
-      setProjects(result);
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    let active = true;
+
+    const loadProjects = async () => {
+      try {
+        const result = await ProjectService.getAllProjectsWithStats();
+        if (active) {
+          setProjects(result);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (active) {
+          console.error(e);
+          setLoading(false);
+        }
+      }
+    };
+
     loadProjects();
-  }, [currentProject]); // Reload when back from an editor or duplicate happens inside
+
+    return () => {
+      active = false;
+    };
+  }, []); // Only run on mount
 
   const filteredProjects = useMemo(() => {
     return projects

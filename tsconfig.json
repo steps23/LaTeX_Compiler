@@ -6,6 +6,7 @@
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
+    "strict": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -17,6 +18,14 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src", "server.ts", "server", "vite.config.ts", "vitest.config.ts", "server.test.ts", "test"],
+  "include": [
+    "src",
+    "server.ts",
+    "server",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "server.test.ts",
+    "test"
+  ],
   "exclude": ["node_modules", "dist"]
 }
