@@ -14,56 +14,73 @@ export function PdfViewer() {
   const [totalPages, setTotalPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [prevBytes, setPrevBytes] = useState<Uint8Array | undefined>(
-    compileResult?.pdfBytes,
-  );
 
-  if (compileResult?.pdfBytes !== prevBytes) {
-    setPrevBytes(compileResult?.pdfBytes);
-    setPdfDoc(null);
-    setTotalPages(0);
-    setPageNumber(1);
-    setRenderError(null);
-  }
+  const destroyPromiseRef = useRef<Promise<void>>(Promise.resolve());
 
   // Load PDF Document only when bytes change
   useEffect(() => {
     let isMounted = true;
+    let localLoadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 
-    if (!compileResult?.pdfBytes || compileResult.pdfBytes.length === 0) {
-      return;
-    }
+    const loadDoc = async () => {
+      const bytes = compileResult?.pdfBytes;
 
-    const loadingTask = pdfjsLib.getDocument({ data: compileResult.pdfBytes });
+      await destroyPromiseRef.current;
+      if (!isMounted) return;
 
-    loadingTask.promise
-      .then((doc) => {
+      if (!bytes || bytes.length === 0) {
+        setPdfDoc(null);
+        setTotalPages(0);
+        setPageNumber(1);
+        setRenderError(null);
+        return;
+      }
+
+      setPdfDoc(null);
+      setTotalPages(0);
+      setPageNumber(1);
+      setRenderError(null);
+
+      const loadingTask = pdfjsLib.getDocument({ data: bytes });
+      localLoadingTask = loadingTask;
+
+      try {
+        const doc = await loadingTask.promise;
         if (isMounted) {
           setPdfDoc(doc);
           setTotalPages(doc.numPages);
         } else {
-          (doc as unknown as { destroy: () => Promise<void> }).destroy().catch(console.error);
+          // @ts-expect-error Types are missing destroy
+          doc.destroy();
         }
-      })
-      .catch((err: unknown) => {
-        const isCancelled =
-          err instanceof Error &&
-          (err.name === "RenderingCancelledException" ||
-            err.name === "PromiseCancelledException" ||
-            err.message?.includes("destroyed") ||
-            err.message?.includes("cancelled"));
-        if (isCancelled) return;
+      } catch (err: unknown) {
+        if (!isMounted) return;
 
-        if (isMounted) {
-          console.error("PDF Load Error", err);
-          const errMessage = err instanceof Error ? err.message : String(err);
-          setRenderError(errMessage);
+        if (
+          err &&
+          typeof err === "object" &&
+          "name" in err &&
+          (err.name === "RenderingCancelledException" ||
+            err.name === "PromiseCancelledException")
+        ) {
+          return;
         }
-      });
+
+        console.error("PDF Load Error", err);
+        const errMessage = err instanceof Error ? err.message : String(err);
+        setRenderError(errMessage);
+      }
+    };
+
+    loadDoc();
 
     return () => {
       isMounted = false;
-      loadingTask.destroy().catch(console.error);
+      if (localLoadingTask) {
+        destroyPromiseRef.current = destroyPromiseRef.current
+          .then(() => localLoadingTask!.destroy())
+          .catch(() => {});
+      }
     };
   }, [compileResult?.pdfBytes]);
 

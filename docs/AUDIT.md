@@ -25,8 +25,8 @@ L'applicazione adesso compila e subisce l'esecuzione di test pulita.
 
 ## Stabilizzazione Baseline
 
-- Risolto memory leak in `PdfViewer.tsx` causato dalla mancata cancellazione dei `renderTask` e caricamento asincrono di `pdfDoc`.
+- Risolto memory leak in `PdfViewer.tsx` causato dalla mancata cancellazione progressiva e ordinata dei task asincroni (`loadingTask` e `renderTask`). Implementato lifecycle completamente serializzato.
 - Rimossa la dipendenza esterna unpkg CDN del worker di `pdfjs-dist` rendendo l'import gestito interamente da Vite localmente.
-- Risolto difetto nel `onDidChangeModel` di Monaco, dove i view state tra i file non venivano opportunamente ripristinati.
-- Creati test concreti e senza falsi positivi per validare timeout, clean up, destroy the PDF page e le associazioni di stato in Monaco via `createDeferred`.
-- Aggiunto hook GitHub Action `ci.yml` per validazione di push o PR.
+- Risolto difetto nel `onDidChangeModel` di Monaco, dove i view state tra i file non venivano opportunamente ripristinati simulando il vero cambio prop di file.
+- Implementati test rigorosi che coprono il workflow completo Monaco `f1 -> f2 -> f1` e validano l'effettivo ripristino di `ICodeEditorViewState`.
+- Aggiunto hook GitHub Action `ci.yml` per validazione di push o PR per assicurare che il branch `main` sia sempre certificato. L'applicazione adesso compila con successo su CI tramite `npm ci`, test passanti, lint e build corretti.

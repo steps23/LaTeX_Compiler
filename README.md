@@ -1,32 +1,39 @@
 # TeXForge
 
-TeXForge is a modern, collaborative online LaTeX editor. It provides real-time compilation, a responsive interface, and support for both guest-mode offline persistence and unified cloud workflows.
+TeXForge is a modern online LaTeX editor built as a React/Vite SPA. It focuses on local execution by using Monaco Editor and PDF.js workers directly, persisting data entirely client-side.
 
-## Environment Compatibility
+## Current State
 
-- **Google AI Studio Preview:** Runs perfectly out of the box in the iframe preview using Guest Mode. Guest mode is securely backed by IndexedDB and uses a robust HTTP compilation fallback to ensure that valid PDFs are produced without downloading hundreds of megabytes of WASM assets on every isolated browser boot. The codebase is fully verified via automated tests, linting, and typechecking.
-- **Firebase / Cloud Run:** Not yet explicitly connected to a Firebase instance out of the box, however, the persistence engine (`src/state/db.ts`) exposes clearly separated data interfaces mapping directly to Firestore data models to be swapped easily if `COMPILER_MODE=server` or cloud credentials are set.
-- **Server Compiler:** The application includes a backend pattern scaffold to switch to `tectonic` or `texlive` based backends if deployed to a Docker container via Cloud Run.
+- **Application Architecture:** React SPA utilizing Vite.
+- **Persistence:** Local persistence backed securely by IndexedDB (`idb`). No external cloud synchronization or Firebase integration is currently active.
+- **Compilation:** Uses a robust remote HTTP compilation fallback to ensure valid PDFs are produced without requiring heavy local WASM assets or a Docker backend.
+- **Editor:** Integrated Monaco Editor with local worker scripts for performance.
+- **PDF Viewer:** A basic, single-page PDF viewer using a locally imported PDF.js worker.
+- **Collaboration:** Currently a single-player, offline-first experience. No real-time collaboration features are implemented.
+- **Desktop:** The planned Tauri/Desktop application is not yet implemented.
 
-## Architecture Guidelines
+## Directory Structure
 
-- `src/components/` - Resizable Layout and App Chrome.
+- `src/components/` - Resizable Layout, Header, Error Boundary.
 - `src/features/` - Abstractions for discrete functions:
-  - `editor`: Monaco Editor wrapper and markers.
-  - `compiler`: Unified compilation abstraction supporting the current HTTP/WASM implementation.
-  - `pdfViewer`: Isolated PDF.js container handling blob array parsing and virtualization.
-  - `fileTree`: Project structures.
-- `src/state/` - Application State and strictly-typed IndexedDB interface.
+  - `editor`: Monaco Editor wrapper preserving view states between file switches.
+  - `compiler`: HTTP-based remote LaTeX compilation.
+  - `pdfViewer`: Isolated PDF.js container handling the rendering and lifecycle of PDF buffers.
+  - `fileTree`: Project structure visualization and file management.
+- `src/state/` - Zustand stores and structured IndexedDB interface.
 
 ## Known Limitations
 
-- SyncTeX is not currently available from the HTTP compilation fallback. Source-to-PDF click requires WASM engines that support outputting the `.synctex` binary file block.
+- SyncTeX is not currently available from the HTTP compilation fallback.
+- The PDF Viewer renders only a single active page at a time.
+- No real-time collaboration capabilities.
+- Cloud saving and Google Drive integrations are theoretical boundaries mapped in the codebase but not functionally connected.
 
 ## Third-Party Licenses
 
 - **PDF.js**: Licensed under Apache 2.0.
 - **Monaco Editor**: Licensed under MIT.
-- **Latex-Online Engine (Fallback)**: Provided as a public good API by external developers.
+- **Latex-Online Engine**: Provided via open HTTP compilation endpoint.
 
 ---
 
