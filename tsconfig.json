@@ -16,5 +16,7 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["src", "server.ts", "server", "vite.config.ts", "vitest.config.ts", "server.test.ts", "test"],
+  "exclude": ["node_modules", "dist"]
 }

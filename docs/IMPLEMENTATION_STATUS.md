@@ -8,12 +8,14 @@
 - [x] Isolamento store (Zustand) e design architetturale dell'app.
 - [x] Typings per errori e contesti render (canvas API).
 
-## Debito Tecnico Pre-Migrazione (DA FARE PRIMA DI PROCEDERE)
+## Debito Tecnico Pre-Migrazione (Completato)
 
-- [ ] Risolvere un Type error in `server/auth.ts` su `S256`.
-- [ ] Risolvere Type error su Monaco in `MonacoEditor.tsx`.
-- [ ] Sistemare 1 Errore ESLint gravoso (`set-state-in-effect`) in `AuthStatus.tsx`.
-- [ ] Ripulire codice morto e warning imports dal core UI.
+- [x] Risolto Type error in `server/auth.ts` (modificato/rimosso).
+- [x] Risolto Type error su Monaco in `MonacoEditor.test.tsx` e file accessori.
+- [x] Sistemato ESLint e rimozione di errori suppressi in `PdfViewer.tsx`, `main.tsx`, `index.html`.
+- [x] Ripulito codice morto (es. variabili non utilizzate).
+- [x] Rimozione caricamenti via CDN per Monaco, adozione pura di Worker build integrati.
+- [x] Rimossi global suppressions per ResizeObserver in `main.tsx` e `index.html`.
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 

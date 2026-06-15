@@ -22,6 +22,11 @@ if (!globalThis.crypto) {
   });
 }
 
+// Mock queryCommandSupported for Monaco in JSDOM
+if (typeof document.queryCommandSupported === "undefined") {
+  document.queryCommandSupported = () => false;
+}
+
 // Mock pdfjs-dist because JSDOM doesn't support DOMMatrix and canvas fully
 vi.mock("pdfjs-dist", async () => {
   return {

@@ -16,13 +16,14 @@ export function PdfViewer() {
 
   // Load PDF Document only when bytes change
   useEffect(() => {
+    let isMounted = true;
     if (!compileResult?.pdfBytes || compileResult.pdfBytes.length === 0) {
-      // eslint-disable-next-line
-      setPdfDoc(null);
+      Promise.resolve().then(() => {
+        if (isMounted) setPdfDoc(null);
+      });
       return;
     }
 
-    let isMounted = true;
     const loadingTask = pdfjsLib.getDocument({ data: compileResult.pdfBytes });
 
     loadingTask.promise

@@ -1,6 +1,5 @@
 import { test, expect } from "vitest";
 import request from "supertest";
-import { createServer } from "http";
 import express from "express";
 
 test("Server healthcheck or API responds", async () => {

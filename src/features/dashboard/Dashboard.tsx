@@ -58,7 +58,7 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProjects();
   }, [currentProject]); // Reload when back from an editor or duplicate happens inside
 

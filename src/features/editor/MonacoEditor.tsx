@@ -1,7 +1,25 @@
 import { useRef, useEffect, useState } from "react";
 import { useEditorStore } from "../../state/store";
 import { X, File } from "lucide-react";
-import Editor, { OnMount } from "@monaco-editor/react";
+import Editor, { OnMount, loader } from "@monaco-editor/react";
+import * as monaco from "monaco-editor";
+// @ts-expect-error missing type for worker
+import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+// @ts-expect-error missing type for worker
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+
+import { FileNode } from "../../types";
+
+// Configure Monaco to be completely local
+self.MonacoEnvironment = {
+  getWorker(_: string, label: string) {
+    if (label === "json") {
+      return new jsonWorker();
+    }
+    return new editorWorker();
+  },
+};
+loader.config({ monaco });
 
 export function MonacoEditorRenderer() {
   const {
@@ -16,22 +34,19 @@ export function MonacoEditorRenderer() {
     setEditorViewState,
   } = useEditorStore();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const disposablesRef = useRef<{ dispose: () => void }[]>([]);
+  const activeFileIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const openFileNodes = openFiles
     .map((id) => files.find((f) => f.id === id))
-    .filter(Boolean) as typeof files;
+    .filter(Boolean) as FileNode[];
 
   const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      // Save view state when switching away from this active file
-      // Actually, we can't reliably read the editor ref state in a generic unmount without knowing WHICH file it was.
-      // So we handle saving in the setActiveFile button click, OR better, inside handleEditorMount and before unmount if possible.
-      // Easiest is to save view state on an interval, or subscribe to editor scroll/cursor events.
-    };
-  }, []);
 
   useEffect(() => {
     if (editorRef.current && activeLine) {
@@ -43,28 +58,46 @@ export function MonacoEditorRenderer() {
 
   useEffect(() => {
     let currentUrl: string | null = null;
+    let isMounted = true;
 
-    if (activeFile && activeFile.blob) {
-      currentUrl = URL.createObjectURL(activeFile.blob);
-      // eslint-disable-next-line
-      setImageViewUrl(currentUrl);
-    } else {
-      setImageViewUrl(null);
-    }
+    Promise.resolve().then(() => {
+      if (activeFile && activeFile.blob) {
+        currentUrl = URL.createObjectURL(activeFile.blob);
+        if (isMounted) {
+          setImageViewUrl(currentUrl);
+        }
+      } else {
+        if (isMounted) {
+          setImageViewUrl(null);
+        }
+      }
+    });
 
     return () => {
+      isMounted = false;
       if (currentUrl) {
         URL.revokeObjectURL(currentUrl);
       }
     };
   }, [activeFile]);
 
+  useEffect(() => {
+    return () => {
+      disposablesRef.current.forEach((d) => d.dispose());
+      disposablesRef.current = [];
+    };
+  }, []);
+
   const handleEditorMount: OnMount = (editor) => {
     editorRef.current = editor;
 
+    // Clean up previous listeners if remounting
+    disposablesRef.current.forEach((d) => d.dispose());
+    disposablesRef.current = [];
+
     // Restore state
-    if (activeFileId) {
-      const state = editorViewStates[activeFileId];
+    if (activeFileIdRef.current) {
+      const state = editorViewStates[activeFileIdRef.current];
       if (state) {
         editor.restoreViewState(state);
       }
@@ -76,18 +109,30 @@ export function MonacoEditorRenderer() {
       editor.focus();
     }
 
-    // Rather than listening to every click, we can save view state whenever cursor/scroll changes
-    editor.onDidChangeCursorPosition(() => {
-      if (activeFileId) {
-        setEditorViewState(activeFileId, editor.saveViewState());
+    const saveViewState = () => {
+      const currentId = activeFileIdRef.current;
+      if (currentId) {
+        const state = editor.saveViewState();
+        setEditorViewState(currentId, state);
       }
-    });
-    editor.onDidScrollChange(() => {
-      if (activeFileId) {
-        setEditorViewState(activeFileId, editor.saveViewState());
-      }
-    });
+    };
+
+    disposablesRef.current.push(
+      editor.onDidChangeCursorPosition(saveViewState),
+    );
+    disposablesRef.current.push(editor.onDidScrollChange(saveViewState));
   };
+
+  // Whenever we switch active files but KEEP the same editor instance,
+  // onMount isn't called again. So we need to handle restoring view state purely on activeFileId change.
+  useEffect(() => {
+    if (editorRef.current && activeFileId) {
+      const state = editorViewStates[activeFileId];
+      if (state) {
+        editorRef.current.restoreViewState(state);
+      }
+    }
+  }, [activeFileId, editorViewStates]);
 
   if (!activeFile && openFiles.length === 0) {
     return (
@@ -149,7 +194,7 @@ export function MonacoEditorRenderer() {
         language={language}
         value={activeFile.content || ""}
         theme="vs-dark"
-        path={activeFile.id} // Ensures monaco treats models separately per file
+        path={activeFile.id}
         onMount={handleEditorMount}
         onChange={(val) => {
           if (val !== undefined) {
