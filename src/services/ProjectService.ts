@@ -1,5 +1,5 @@
 import { ProjectRepo, FileRepo } from "../db/repository";
-import { Project, FileNode } from "../types";
+import { Project } from "../types";
 import { sortProjectsByRecent } from "../utils/projects";
 
 export type ProjectWithStats = Project & { fileCount: number };

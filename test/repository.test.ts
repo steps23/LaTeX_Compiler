@@ -1,13 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  ProjectRepo,
-  FileRepo,
-  SyncAccountRepo,
-  SyncQueueRepo,
-  AppSettingsRepo,
-} from "../src/db/repository";
-import { getDB } from "../src/db/core";
-import { Project, FileNode, SyncAccount, SyncOperation } from "../src/types";
+import { describe, it, expect, beforeEach } from "vitest";
+import { ProjectRepo, FileRepo, AppSettingsRepo } from "../src/db/repository";
+import { Project, FileNode } from "../src/types";
 import { openDB } from "idb";
 
 describe("Database Repositories and Migration", () => {
@@ -36,7 +29,7 @@ describe("Database Repositories and Migration", () => {
       updatedAt: 1,
       mainFilePath: "main.tex",
       settings: {},
-    } as any);
+    } as unknown as Project);
     await db1.put("files", {
       id: "f1",
       projectId: "p1",
@@ -45,7 +38,7 @@ describe("Database Repositories and Migration", () => {
       isFolder: false,
       updatedAt: 1,
       content: "hello",
-    } as any);
+    } as unknown as FileNode);
     await db1.put("files", {
       id: "fBlob",
       projectId: "p1",
@@ -54,7 +47,7 @@ describe("Database Repositories and Migration", () => {
       isFolder: false,
       updatedAt: 1,
       blob: new Blob(["data"]),
-    } as any);
+    } as unknown as FileNode);
     db1.close();
 
     // Now open v2 database manually using core.ts logic, but with the test db name
@@ -76,7 +69,6 @@ describe("Database Repositories and Migration", () => {
           db.createObjectStore("appSettings", { keyPath: "id" });
 
           const projectStore = tx.objectStore("projects");
-          projectStore.createIndex("syncAccountId", "syncAccountId");
           let pCursor = await projectStore.openCursor();
           while (pCursor) {
             const p = pCursor.value;

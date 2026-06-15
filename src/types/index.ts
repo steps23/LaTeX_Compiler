@@ -1,4 +1,4 @@
-export type ProjectStorageMode = "local" | "drive" | "hybrid";
+export type ProjectStorageMode = "local";
 
 export type SyncStatus =
   | "local-only"
@@ -18,9 +18,6 @@ export type Project = {
   settings: ProjectSettings;
   storageMode: ProjectStorageMode;
   syncStatus: SyncStatus;
-  syncAccountId?: string;
-  driveId?: string;
-  driveFolderId?: string;
   isDeleted?: boolean;
 };
 
@@ -47,30 +44,6 @@ export type FileNode = {
   isDeleted?: boolean;
   deletedAt?: number;
   syncStatus?: SyncStatus;
-  remoteFileId?: string;
-  remoteVersion?: string;
-  remoteModifiedAt?: number;
-  lastSyncedHash?: string;
-};
-
-export type SyncAccount = {
-  id: string;
-  provider: "google-drive";
-  email: string;
-  displayName: string;
-  avatarUrl?: string;
-  addedAt: number;
-  isActive: boolean;
-  // Tokens are omitted here intentionally for security in a client-side store,
-  // or stored securely if needed. Wait for OAuth specs.
-};
-
-export type SyncBinding = {
-  id: string;
-  projectId: string;
-  accountId: string;
-  boundAt: number;
-  driveFolderId: string;
 };
 
 export type SyncOperationType = "upload" | "download" | "delete" | "mkdir";

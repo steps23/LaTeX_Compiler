@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  schedule,
-  flushProject,
-  flushFile,
-  flushAll,
-} from "../src/services/FileDebouncer";
+import { schedule, flushFile, flushAll } from "../src/services/FileDebouncer";
 import { FileService } from "../src/services/FileService";
 import { FileNode } from "../src/types";
 

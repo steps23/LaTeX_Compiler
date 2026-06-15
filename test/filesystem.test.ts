@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { useEditorStore } from "../src/state/store";
 import { importProjectZip } from "../src/utils/projects";
 import JSZip from "jszip";
@@ -136,7 +136,7 @@ describe("File System Operations", () => {
     const zip = new JSZip();
     zip.file("main.tex", "hello world");
     zip.file("folder/sub.tex", "sub content");
-    
+
     const blob = await zip.generateAsync({ type: "blob" });
     const file = new File([blob], "testproj.zip", { type: "application/zip" });
 
@@ -144,10 +144,11 @@ describe("File System Operations", () => {
     await useEditorStore.getState().openProject(projectId);
 
     const files = useEditorStore.getState().files;
-    expect(files.some(f => f.path === "main.tex" && !f.isFolder)).toBe(true);
+    expect(files.some((f) => f.path === "main.tex" && !f.isFolder)).toBe(true);
     // Project import dynamically creates folders
-    expect(files.some(f => f.path === "folder" && f.isFolder)).toBe(true);
-    expect(files.some(f => f.path === "folder/sub.tex" && !f.isFolder)).toBe(true);
+    expect(files.some((f) => f.path === "folder" && f.isFolder)).toBe(true);
+    expect(files.some((f) => f.path === "folder/sub.tex" && !f.isFolder)).toBe(
+      true,
+    );
   });
 });
-

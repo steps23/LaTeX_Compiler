@@ -1,8 +1,6 @@
 import {
   Play,
   Loader,
-  Share2,
-  ArrowLeft,
   CheckCircle2,
   ChevronLeft,
   Download,
@@ -13,7 +11,6 @@ import { flushProject } from "../services/FileDebouncer";
 import { Link } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { exportProjectZip } from "../utils/projects";
-import { AuthStatus } from "./AuthStatus";
 
 export function Header() {
   const {
@@ -120,7 +117,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        <AuthStatus />
         <div className="w-[1px] h-6 bg-zinc-800 mx-2" />
         {currentProject?.storageMode === "local" && (
           <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-sm mr-2">

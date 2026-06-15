@@ -33,10 +33,7 @@ export const FileService = {
     project.updatedAt = file.updatedAt;
 
     let syncOp: SyncOperation | undefined;
-    if (
-      project.storageMode !== "local" &&
-      project.syncStatus !== "local-only"
-    ) {
+    if (project.storageMode !== "local") {
       file.syncStatus = "pending";
       syncOp = {
         id: crypto.randomUUID(),
@@ -61,40 +58,9 @@ export const FileService = {
 
     if (project) {
       project.updatedAt = now;
-    }
-
-    if (file.syncStatus === "local-only" || !file.remoteFileId) {
-      // It's local only or never synced, safe to hard delete
-      if (project) {
-        await FileRepo.atomicHardDeleteWithProjectUpdate(id, project);
-      } else {
-        await FileRepo.delete(id);
-      }
+      await FileRepo.atomicHardDeleteWithProjectUpdate(id, project);
     } else {
-      // Remote bound: tombstone and atomic queue
-      file.isDeleted = true;
-      file.deletedAt = now;
-      file.syncStatus = "pending";
-      file.updatedAt = now;
-
-      if (project) {
-        const syncOp = {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          fileId: file.id,
-          type: "delete" as const,
-          status: "queued" as const,
-          retryCount: 0,
-          queuedAt: now,
-        };
-        await FileRepo.atomicSoftDeleteWithQueueAndProject(
-          file,
-          project,
-          syncOp,
-        );
-      } else {
-        await FileRepo.save(file);
-      }
+      await FileRepo.delete(id);
     }
   },
 };

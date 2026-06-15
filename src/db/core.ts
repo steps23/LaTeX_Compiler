@@ -2,8 +2,6 @@ import { openDB, DBSchema, IDBPDatabase } from "idb";
 import {
   Project,
   FileNode,
-  SyncAccount,
-  SyncBinding,
   SyncOperation,
   SyncConflict,
   AppSettings,
@@ -13,20 +11,20 @@ export interface TeXForgeDB extends DBSchema {
   projects: {
     key: string;
     value: Project;
-    indexes: { updatedAt: number; syncAccountId: string };
+    indexes: { updatedAt: number };
   };
   files: {
     key: string;
     value: FileNode;
-    indexes: { projectId: string; "projectId, isDeleted": [string, number] }; // booleans in indices usually numbers 0 or 1, but IDB supports bools in some browsers, better use projectId directly and filter
+    indexes: { projectId: string; "projectId, isDeleted": [string, number] };
   };
   syncAccounts: {
     key: string;
-    value: SyncAccount;
+    value: unknown;
   };
   syncBindings: {
     key: string;
-    value: SyncBinding;
+    value: unknown;
     indexes: { projectId: string; accountId: string };
   };
   syncQueue: {
@@ -96,9 +94,7 @@ export async function getDB() {
 
           if (oldVersion === 1) {
             // Add new indices on existing stores
-            if (!projectStore.indexNames.contains("syncAccountId")) {
-              projectStore.createIndex("syncAccountId", "syncAccountId");
-            }
+            // Removed syncAccountId index as it is no longer used
 
             // Migrate projects
             let projectCursor = await projectStore.openCursor();

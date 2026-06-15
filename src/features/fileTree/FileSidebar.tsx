@@ -3,7 +3,7 @@ import { FileNode } from "../../types";
 import { useEditorStore } from "../../state/store";
 import { FileTreeNode } from "./FileTreeNode";
 import { Plus, FolderPlus, Upload } from "lucide-react";
-import { isValidName, normalizePath, getFileName } from "../../utils/paths";
+import { isValidName, getFileName } from "../../utils/paths";
 
 interface TreeNodeType {
   path: string;

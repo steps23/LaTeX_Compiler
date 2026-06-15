@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { useEditorStore } from "../../state/store";
-import { ArrowLeftRight, X, File, Image as ImageIcon } from "lucide-react";
+import { X, File } from "lucide-react";
 import Editor, { OnMount } from "@monaco-editor/react";
 
 export function MonacoEditorRenderer() {
@@ -63,8 +63,11 @@ export function MonacoEditorRenderer() {
     editorRef.current = editor;
 
     // Restore state
-    if (activeFileId && editorViewStates[activeFileId]) {
-      editor.restoreViewState(editorViewStates[activeFileId]);
+    if (activeFileId) {
+      const state = editorViewStates[activeFileId];
+      if (state) {
+        editor.restoreViewState(state);
+      }
     }
 
     if (activeLine) {

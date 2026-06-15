@@ -39,7 +39,7 @@ export class HttpFallbackCompiler implements LatexCompiler {
           } else {
             rawLog = await response.text();
           }
-        } catch (_e) {
+        } catch {
           // ignore parsing error
         }
 

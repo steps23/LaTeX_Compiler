@@ -1,7 +1,9 @@
 # Audit Report
+
 Data: L'audit è stato completato per stabilizzare la base di codice e rimuovere eventuali debito tecnico iniziale.
 
 ## Problematiche risolte
+
 - `package.json`: Aggiunti nomi corretti, script formali (lint, typecheck, format, build) e risolto un problema di dipendenze duplicate.
 - **Tipizzazione**: Rimossi tutti gli `any` non sicuri convertendoli a \`unknown\` e type casting sicuro.
 - **Errori globali non gestiti**:
@@ -13,6 +15,7 @@ Data: L'audit è stato completato per stabilizzare la base di codice e rimuovere
 - **Dipendenze rimosse**: Nessuna eccetto le correzioni a livello `devDependencies`, tutti i task previsti per il baseline sono completati.
 
 ## Architettura Sync & Google Drive
+
 - È stato introdotto un livello di astrazione del database Local-First (`ProjectStorageMode`, `SyncQueue`, etc.).
 - I progetti `local-only` **non creano** operazioni di sync nella coda.
 - I file associati a Drive utilizzano soft-delete (`deletedAt`) e le code atomiche tramite operazione `delete-file` della transazione per garantire consistenza futura.

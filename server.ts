@@ -1,10 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import cookieParser from "cookie-parser";
 import { config } from "./server/config";
-import { authRouter } from "./server/auth";
-import { sessionRouter } from "./server/session";
 import { apiRouter } from "./server/api";
 
 async function startServer() {
@@ -12,11 +9,8 @@ async function startServer() {
   const PORT = Number(config.PORT);
 
   app.use(express.json({ limit: "50mb" }));
-  app.use(cookieParser());
 
   // Mount routers
-  app.use("/api/auth", authRouter);
-  app.use("/api/session", sessionRouter);
   app.use("/api", apiRouter);
 
   // Vite middleware for development

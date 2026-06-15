@@ -12,7 +12,7 @@ if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
           try {
             callback(entries, observer);
-          } catch (e) {
+          } catch {
             // Ignore
           }
         });

@@ -10,6 +10,7 @@ import {
   isValidProjectFilePath,
   isDescendant,
 } from "../utils/paths";
+import type { editor } from "monaco-editor";
 
 export interface EditorState {
   // Global View
@@ -21,7 +22,7 @@ export interface EditorState {
   activeFileId: string | null;
   openFiles: string[];
   expandedSubfolders: Record<string, boolean>;
-  editorViewStates: Record<string, unknown>;
+  editorViewStates: Record<string, editor.ICodeEditorViewState | null>;
   activeLine: number | null;
   isCompiling: boolean;
   compileResult: CompileResult | null;
@@ -45,7 +46,10 @@ export interface EditorState {
   // File Actions
   setActiveFile: (fileId: string) => Promise<void>;
   closeFileAndTab: (fileId: string) => Promise<void>;
-  setEditorViewState: (fileId: string, state: unknown) => void;
+  setEditorViewState: (
+    fileId: string,
+    state: editor.ICodeEditorViewState | null,
+  ) => void;
   goToLine: (fileId: string, line: number) => void;
   updateFileContent: (fileId: string, content: string) => void;
   createFile: (
@@ -242,7 +246,7 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
       if (stored) {
         expanded = JSON.parse(stored);
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
 
@@ -375,7 +379,10 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
     });
   },
 
-  setEditorViewState: (fileId: string, state: unknown) => {
+  setEditorViewState: (
+    fileId: string,
+    state: editor.ICodeEditorViewState | null,
+  ) => {
     const { editorViewStates } = get();
     set({
       editorViewStates: {
@@ -745,7 +752,7 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
             `project_${state.currentProject.id}_expand`,
             JSON.stringify(newExpanded),
           );
-        } catch (e) {
+        } catch {
           // Ignore
         }
       }

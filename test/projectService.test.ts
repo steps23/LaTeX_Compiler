@@ -44,7 +44,7 @@ vi.mock("../src/db/repository", () => {
 
 // Import the _resetMocks
 import * as RepoMock from "../src/db/repository";
-const { _resetMocks } = RepoMock as any;
+const { _resetMocks } = RepoMock as unknown as { _resetMocks: () => void };
 
 describe("ProjectService", () => {
   beforeEach(async () => {

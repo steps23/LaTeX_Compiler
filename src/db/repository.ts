@@ -1,11 +1,5 @@
 import { getDB } from "./core";
-import {
-  Project,
-  FileNode,
-  SyncAccount,
-  SyncOperation,
-  AppSettings,
-} from "../types";
+import { Project, FileNode, SyncOperation, AppSettings } from "../types";
 
 // Project Repository
 export const ProjectRepo = {
@@ -134,26 +128,6 @@ export const FileRepo = {
       cursor = await cursor.continue();
     }
     await tx.done;
-  },
-};
-
-// Sync Accounts Repository
-export const SyncAccountRepo = {
-  async getAll(): Promise<SyncAccount[]> {
-    const db = await getDB();
-    return db.getAll("syncAccounts");
-  },
-  async getById(id: string): Promise<SyncAccount | undefined> {
-    const db = await getDB();
-    return db.get("syncAccounts", id);
-  },
-  async save(account: SyncAccount): Promise<void> {
-    const db = await getDB();
-    await db.put("syncAccounts", account);
-  },
-  async delete(id: string): Promise<void> {
-    const db = await getDB();
-    await db.delete("syncAccounts", id);
   },
 };
 

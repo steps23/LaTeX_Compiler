@@ -1,6 +1,6 @@
 import { Project, FileNode } from "../types";
 import JSZip from "jszip";
-import { getFileName, isValidName, normalizePath } from "./paths";
+import { getFileName, normalizePath } from "./paths";
 import { FileService } from "../services/FileService";
 import { ProjectService } from "../services/ProjectService";
 

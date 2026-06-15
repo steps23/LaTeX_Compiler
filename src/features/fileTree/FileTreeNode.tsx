@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { FileNode } from "../../types";
 import {
   File,
@@ -9,7 +9,6 @@ import {
   FolderOpen,
   ChevronRight,
   ChevronDown,
-  MoreVertical,
 } from "lucide-react";
 import { useEditorStore } from "../../state/store";
 
@@ -67,7 +66,7 @@ export function FileTreeNode({ treeNode, level }: FileTreeNodeProps) {
         if (treeNode.node && treeNode.node.id === data.id) return;
         useEditorStore.getState().moveFileNode(data.id, treeNode.path);
       }
-    } catch (err) {
+    } catch {
       // If not our drag payload, could be native file upload. We'll handle it globally or in the container.
     }
   };

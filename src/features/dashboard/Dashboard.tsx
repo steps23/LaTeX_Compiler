@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -19,7 +19,6 @@ import {
   ProjectWithStats,
 } from "../../services/ProjectService";
 import { clsx } from "clsx";
-import { AuthStatus } from "../../components/AuthStatus";
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -62,14 +61,6 @@ export function Dashboard() {
     // eslint-disable-next-line
     loadProjects();
   }, [currentProject]); // Reload when back from an editor or duplicate happens inside
-
-  const mapSort = (a: ProjectWithStats, b: ProjectWithStats) => {
-    if (sortField === "name") {
-      return a.name.localeCompare(b.name);
-    } else {
-      return b[sortField] - a[sortField];
-    }
-  };
 
   const filteredProjects = useMemo(() => {
     return projects
@@ -117,7 +108,6 @@ export function Dashboard() {
           </h1>
         </div>
         <div className="flex items-center gap-4">
-          <AuthStatus />
           {currentProject && (
             <button
               onClick={() => navigate(`/projects/${currentProject.id}`)}
@@ -148,7 +138,7 @@ export function Dashboard() {
                       ).importProjectZip;
                       const targetId = await importProjectZip(file);
                       navigate(`/projects/${targetId}`);
-                    } catch (err) {
+                    } catch {
                       alert("Failed to import ZIP");
                     }
                   }
