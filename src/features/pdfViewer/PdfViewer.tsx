@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEditorStore } from "../../state/store";
 import { ZoomIn, ZoomOut, Download, AlertTriangle } from "lucide-react";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 export function PdfViewer() {
   const { compileResult, isCompiling, currentProject } = useEditorStore();
@@ -41,10 +42,18 @@ export function PdfViewer() {
           setPdfDoc(doc);
           setTotalPages(doc.numPages);
         } else {
-          doc.destroy().catch(console.error);
+          (doc as unknown as { destroy: () => Promise<void> }).destroy().catch(console.error);
         }
       })
       .catch((err: unknown) => {
+        const isCancelled =
+          err instanceof Error &&
+          (err.name === "RenderingCancelledException" ||
+            err.name === "PromiseCancelledException" ||
+            err.message?.includes("destroyed") ||
+            err.message?.includes("cancelled"));
+        if (isCancelled) return;
+
         if (isMounted) {
           console.error("PDF Load Error", err);
           const errMessage = err instanceof Error ? err.message : String(err);

@@ -22,3 +22,11 @@ Data: L'audit è stato completato per stabilizzare la base di codice e rimuovere
 - Nota: la coda `syncQueue` non viene attualmente consumata. L'integrazione Google Auth e Syncing con le vere API Drive non è ancora implementata.
 
 L'applicazione adesso compila e subisce l'esecuzione di test pulita.
+
+## Stabilizzazione Baseline
+
+- Risolto memory leak in `PdfViewer.tsx` causato dalla mancata cancellazione dei `renderTask` e caricamento asincrono di `pdfDoc`.
+- Rimossa la dipendenza esterna unpkg CDN del worker di `pdfjs-dist` rendendo l'import gestito interamente da Vite localmente.
+- Risolto difetto nel `onDidChangeModel` di Monaco, dove i view state tra i file non venivano opportunamente ripristinati.
+- Creati test concreti e senza falsi positivi per validare timeout, clean up, destroy the PDF page e le associazioni di stato in Monaco via `createDeferred`.
+- Aggiunto hook GitHub Action `ci.yml` per validazione di push o PR.

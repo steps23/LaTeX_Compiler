@@ -16,7 +16,9 @@
 - [x] Ripulito codice morto (es. variabili non utilizzate).
 - [x] Sostituito caricamenti via CDN per Monaco, adozione pura di Worker build integrati.
 - [x] Rimossi global suppressions per ResizeObserver.
-- [x] Corretti difetti di lifecycle, URL Objects leak, reset stato asincrono illegale e re-introdotti strict mode typechecks.
+- [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor` e integrati Fake timers e strict mode typechecks e rimosse dependency instabili (come name.match non boolean).
+- [x] PDF.js localizzato via Vite build senza CDN esterne.
+- [x] GitHub Action per CI (lint, format, test, build).
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 

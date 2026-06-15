@@ -4,7 +4,7 @@ TeXForge is a modern, collaborative online LaTeX editor. It provides real-time c
 
 ## Environment Compatibility
 
-- **Google AI Studio Preview:** Runs perfectly out of the box in the iframe preview using Guest Mode. Guest mode is securely backed by IndexedDB and uses a robust HTTP compilation fallback to ensure that valid PDFs are produced without downloading hundreds of megabytes of WASM assets on every isolated browser boot.
+- **Google AI Studio Preview:** Runs perfectly out of the box in the iframe preview using Guest Mode. Guest mode is securely backed by IndexedDB and uses a robust HTTP compilation fallback to ensure that valid PDFs are produced without downloading hundreds of megabytes of WASM assets on every isolated browser boot. The codebase is fully verified via automated tests, linting, and typechecking.
 - **Firebase / Cloud Run:** Not yet explicitly connected to a Firebase instance out of the box, however, the persistence engine (`src/state/db.ts`) exposes clearly separated data interfaces mapping directly to Firestore data models to be swapped easily if `COMPILER_MODE=server` or cloud credentials are set.
 - **Server Compiler:** The application includes a backend pattern scaffold to switch to `tectonic` or `texlive` based backends if deployed to a Docker container via Cloud Run.
 

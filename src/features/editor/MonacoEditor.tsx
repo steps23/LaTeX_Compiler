@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { useEditorStore } from "../../state/store";
 import { X, File } from "lucide-react";
 import Editor, { OnMount, loader } from "@monaco-editor/react";
@@ -22,7 +22,7 @@ loader.config({ monaco });
 function BlobViewer({ blob, name }: { blob: Blob; name: string }) {
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const isImage = name.match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
+  const isImage = /\.(png|jpg|jpeg|svg|gif|webp)$/i.test(name);
 
   useEffect(() => {
     if (!isImage) return;
@@ -142,7 +142,7 @@ export function MonacoEditorRenderer() {
 
       // When the actual model (file) changes inside Monaco, we restore its specific state
       disposablesRef.current.push(
-        monacoEditor.onDidChangeModel((e) => {
+        monacoEditor.onDidChangeModel(() => {
           const currentId = useEditorStore.getState().activeFileId;
           if (currentId) {
             const state = useEditorStore.getState().editorViewStates[currentId];
