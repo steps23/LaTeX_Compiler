@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useEditorStore } from "../../state/store";
 import { X, File } from "lucide-react";
 import Editor, { OnMount, loader } from "@monaco-editor/react";
@@ -20,20 +20,28 @@ self.MonacoEnvironment = {
 loader.config({ monaco });
 
 function BlobViewer({ blob, name }: { blob: Blob; name: string }) {
-  const [url] = useState(() => URL.createObjectURL(blob));
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const isImage = name.match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
 
   useEffect(() => {
+    if (!isImage) return;
+
+    const url = URL.createObjectURL(blob);
+    if (imgRef.current) {
+      imgRef.current.src = url;
+    }
+
     return () => {
       URL.revokeObjectURL(url);
     };
-  }, [url]);
+  }, [blob, isImage]);
 
-  const isImage = name.match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
-  if (isImage && url) {
+  if (isImage) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950/50">
         <img
-          src={url}
+          ref={imgRef}
           alt={name}
           className="max-w-full max-h-full object-contain drop-shadow-xl"
         />
@@ -68,7 +76,7 @@ export function MonacoEditorRenderer() {
     setActiveFile,
     closeFileAndTab,
   } = useEditorStore();
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const disposablesRef = useRef<{ dispose: () => void }[]>([]);
 
   const activeFile = files.find((f) => f.id === activeFileId);
@@ -76,7 +84,38 @@ export function MonacoEditorRenderer() {
     .map((id) => files.find((f) => f.id === id))
     .filter(Boolean) as FileNode[];
 
-  const previousFileIdRef = useRef<string | null>(activeFileId);
+  // 1. Stable, consistent state capturing
+  const saveCurrentViewState = useCallback(() => {
+    if (!editorRef.current) return;
+    const currentId = useEditorStore.getState().activeFileId;
+    if (currentId) {
+      useEditorStore
+        .getState()
+        .setEditorViewState(
+          currentId,
+          editorRef.current.saveViewState() || null,
+        );
+    }
+  }, []);
+
+  // Synchronously capture view state right when `activeFileId` changes, before React renders
+  useEffect(() => {
+    const unsubscribe = useEditorStore.subscribe((state, prevState) => {
+      if (
+        prevState.activeFileId &&
+        state.activeFileId !== prevState.activeFileId &&
+        editorRef.current
+      ) {
+        useEditorStore
+          .getState()
+          .setEditorViewState(
+            prevState.activeFileId,
+            editorRef.current.saveViewState() || null,
+          );
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (editorRef.current && activeLine) {
@@ -93,68 +132,56 @@ export function MonacoEditorRenderer() {
     };
   }, []);
 
-  const handleEditorMount: OnMount = (editor) => {
-    editorRef.current = editor;
+  const handleEditorMount: OnMount = useCallback(
+    (editor) => {
+      const monacoEditor = editor as monaco.editor.IStandaloneCodeEditor;
+      editorRef.current = monacoEditor;
 
-    disposablesRef.current.forEach((d) => d.dispose());
-    disposablesRef.current = [];
+      disposablesRef.current.forEach((d) => d.dispose());
+      disposablesRef.current = [];
 
-    const currentId = useEditorStore.getState().activeFileId;
-    if (currentId) {
-      const state = useEditorStore.getState().editorViewStates[currentId];
-      if (state) {
-        editor.restoreViewState(state);
+      // When the actual model (file) changes inside Monaco, we restore its specific state
+      disposablesRef.current.push(
+        monacoEditor.onDidChangeModel((e) => {
+          const currentId = useEditorStore.getState().activeFileId;
+          if (currentId) {
+            const state = useEditorStore.getState().editorViewStates[currentId];
+            if (state) {
+              monacoEditor.restoreViewState(state);
+            } else {
+              monacoEditor.setScrollTop(0);
+              monacoEditor.setPosition({ lineNumber: 1, column: 1 });
+            }
+          }
+        }),
+      );
+
+      const currentId = useEditorStore.getState().activeFileId;
+      if (currentId) {
+        const state = useEditorStore.getState().editorViewStates[currentId];
+        if (state) {
+          monacoEditor.restoreViewState(state);
+        }
       }
-    }
 
-    if (useEditorStore.getState().activeLine) {
-      editor.revealLineInCenter(useEditorStore.getState().activeLine!);
-      editor.setPosition({
-        lineNumber: useEditorStore.getState().activeLine!,
-        column: 1,
-      });
-      editor.focus();
-    }
-
-    const saveViewState = () => {
-      const id = useEditorStore.getState().activeFileId;
-      if (id) {
-        useEditorStore
-          .getState()
-          .setEditorViewState(id, editor.saveViewState() || null);
+      if (useEditorStore.getState().activeLine) {
+        monacoEditor.revealLineInCenter(useEditorStore.getState().activeLine!);
+        monacoEditor.setPosition({
+          lineNumber: useEditorStore.getState().activeLine!,
+          column: 1,
+        });
+        monacoEditor.focus();
       }
-    };
 
-    disposablesRef.current.push(
-      editor.onDidChangeCursorPosition(saveViewState),
-    );
-    disposablesRef.current.push(editor.onDidScrollChange(saveViewState));
-  };
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const prevId = previousFileIdRef.current;
-    if (prevId && prevId !== activeFileId) {
-      useEditorStore
-        .getState()
-        .setEditorViewState(prevId, editor.saveViewState() || null);
-    }
-
-    if (activeFileId && activeFileId !== prevId) {
-      const state = useEditorStore.getState().editorViewStates[activeFileId];
-      if (state) {
-        editor.restoreViewState(state);
-      } else {
-        // Reset view state safely for null or missing state
-        editor.setScrollTop(0);
-        editor.setPosition({ lineNumber: 1, column: 1 });
-      }
-    }
-
-    previousFileIdRef.current = activeFileId;
-  }, [activeFileId]);
+      disposablesRef.current.push(
+        monacoEditor.onDidChangeCursorPosition(saveCurrentViewState),
+      );
+      disposablesRef.current.push(
+        monacoEditor.onDidScrollChange(saveCurrentViewState),
+      );
+    },
+    [saveCurrentViewState],
+  );
 
   const renderContent = () => {
     if (!activeFile) return null;
@@ -162,7 +189,7 @@ export function MonacoEditorRenderer() {
     if (activeFile.blob) {
       return (
         <BlobViewer
-          key={activeFile.id}
+          key={`${activeFile.id}-${activeFile.updatedAt}`}
           blob={activeFile.blob}
           name={activeFile.name}
         />

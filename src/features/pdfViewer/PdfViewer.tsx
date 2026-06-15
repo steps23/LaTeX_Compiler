@@ -40,6 +40,8 @@ export function PdfViewer() {
         if (isMounted) {
           setPdfDoc(doc);
           setTotalPages(doc.numPages);
+        } else {
+          doc.destroy().catch(console.error);
         }
       })
       .catch((err: unknown) => {
@@ -52,7 +54,7 @@ export function PdfViewer() {
 
     return () => {
       isMounted = false;
-      loadingTask.destroy();
+      loadingTask.destroy().catch(console.error);
     };
   }, [compileResult?.pdfBytes]);
 
@@ -61,10 +63,13 @@ export function PdfViewer() {
     if (!pdfDoc) return;
 
     let renderTask: pdfjsLib.RenderTask | null = null;
+    let cancelled = false;
 
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(pageNumber);
+
+        if (cancelled) return;
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -98,6 +103,7 @@ export function PdfViewer() {
         renderTask = page.render(renderContext);
         await renderTask.promise;
       } catch (err: unknown) {
+        if (cancelled) return;
         if (
           err instanceof Error &&
           err.name !== "RenderingCancelledException"
@@ -111,6 +117,7 @@ export function PdfViewer() {
     renderPage();
 
     return () => {
+      cancelled = true;
       if (renderTask) {
         renderTask.cancel();
       }

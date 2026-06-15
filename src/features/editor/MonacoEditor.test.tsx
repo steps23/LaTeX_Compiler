@@ -43,6 +43,7 @@ vi.mock("@monaco-editor/react", async () => {
         setPosition: vi.fn(),
         setScrollTop: vi.fn(),
         focus: vi.fn(),
+        onDidChangeModel: vi.fn().mockReturnValue({ dispose: vi.fn() }),
         onDidChangeCursorPosition: vi
           .fn()
           .mockReturnValue({ dispose: vi.fn() }),
