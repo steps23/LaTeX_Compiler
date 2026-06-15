@@ -4,6 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
+    <script>
+      const _consoleError = console.error;
+      console.error = function() {
+        for (let i = 0; i < arguments.length; i++) {
+          if (arguments[i] && arguments[i].toString().includes('ResizeObserver')) {
+            return;
+          }
+        }
+        _consoleError.apply(this, arguments);
+      };
+      
+      const debounceError = window.onerror;
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
+        if (msg && msg.toString().includes('ResizeObserver')) {
+          return true; // Suppress
+        }
+        if (debounceError) return debounceError.apply(this, arguments);
+      };
+      
+      window.addEventListener('error', function (e) {
+        if ((e.message && e.message.includes('ResizeObserver')) || 
+            (e.error && e.error.toString().includes('ResizeObserver'))) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+      
+      window.addEventListener('unhandledrejection', function (e) {
+        if (e.reason && e.reason.toString().includes('ResizeObserver')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
