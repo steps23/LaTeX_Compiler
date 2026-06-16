@@ -83,6 +83,9 @@ vi.mock("@monaco-editor/react", async () => {
 });
 
 describe("MonacoEditorRenderer", () => {
+  let originalCreateObjectURL: typeof URL.createObjectURL;
+  let originalRevokeObjectURL: typeof URL.revokeObjectURL;
+
   beforeEach(() => {
     useEditorStore.setState({
       files: [],
@@ -99,21 +102,14 @@ describe("MonacoEditorRenderer", () => {
     mockDisposeScroll.mockClear();
     pathChangeCallback = null;
     currentPath = undefined;
+
+    originalCreateObjectURL = global.URL.createObjectURL;
+    originalRevokeObjectURL = global.URL.revokeObjectURL;
   });
 
   afterEach(() => {
-    if (
-      global.URL.createObjectURL &&
-      "mockRestore" in global.URL.createObjectURL
-    ) {
-      (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mockRestore();
-    }
-    if (
-      global.URL.revokeObjectURL &&
-      "mockRestore" in global.URL.revokeObjectURL
-    ) {
-      (global.URL.revokeObjectURL as ReturnType<typeof vi.fn>).mockRestore();
-    }
+    global.URL.createObjectURL = originalCreateObjectURL;
+    global.URL.revokeObjectURL = originalRevokeObjectURL;
     vi.restoreAllMocks();
   });
 
@@ -146,21 +142,15 @@ describe("MonacoEditorRenderer", () => {
 
     const { unmount } = render(<MonacoEditorRenderer />);
 
-    // 1. apri f1 -> mockEditorInstance created.
-    // 2. imposta e salva stateF1
     const stateF1 = createMockViewState("stateF1");
     mockEditorInstance.saveViewState.mockReturnValue(stateF1);
 
-    // Simulate scroll or store update that saves view state before switch
     act(() => {
       useEditorStore.setState({ activeFileId: "f2" });
     });
 
-    // 4. verifica che stateF1 sia stato salvato sotto f1
     expect(useEditorStore.getState().editorViewStates.f1).toEqual(stateF1);
 
-    // Now active is f2
-    // 5. imposta e salva stateF2
     const stateF2 = createMockViewState("stateF2");
     mockEditorInstance.saveViewState.mockReturnValue(stateF2);
 
@@ -168,19 +158,21 @@ describe("MonacoEditorRenderer", () => {
       useEditorStore.setState({ activeFileId: "f1" });
     });
 
-    // stateF2 should be saved for f2
     expect(useEditorStore.getState().editorViewStates.f2).toEqual(stateF2);
-
-    // 7. verifica che Monaco ripristini esattamente stateF1
     expect(mockEditorInstance.restoreViewState).toHaveBeenCalledWith(stateF1);
 
-    // 8. torna a f2;
+    // Prepare state F1 to be saved again before traversing to F2
+    mockEditorInstance.saveViewState.mockReturnValue(stateF1);
+
     act(() => {
       useEditorStore.setState({ activeFileId: "f2" });
     });
 
-    // 9. verifica che Monaco ripristini esattamente stateF2.
     expect(mockEditorInstance.restoreViewState).toHaveBeenCalledWith(stateF2);
+
+    // Verify exactly what is left
+    expect(useEditorStore.getState().editorViewStates.f1).toEqual(stateF1);
+    expect(useEditorStore.getState().editorViewStates.f2).toEqual(stateF2);
 
     unmount();
   });
@@ -216,11 +208,15 @@ describe("MonacoEditorRenderer", () => {
       activeFileId: "f1",
     });
 
-    const { unmount } = render(<MonacoEditorRenderer />);
+    const { unmount, rerender } = render(<MonacoEditorRenderer />);
 
     await waitFor(() => {
       expect(createObjectURL).toHaveBeenCalledOnce();
     });
+
+    // Rerender non-related should not trigger object url creation
+    rerender(<MonacoEditorRenderer />);
+    expect(createObjectURL).toHaveBeenCalledOnce();
 
     // Switch to text
     act(() => {

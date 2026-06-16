@@ -6,6 +6,16 @@ import { ZoomIn, ZoomOut, Download, AlertTriangle } from "lucide-react";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
+function isPdfCancellationError(err: unknown): boolean {
+  if (err && typeof err === "object" && "name" in err) {
+    return (
+      err.name === "RenderingCancelledException" ||
+      err.name === "PromiseCancelledException"
+    );
+  }
+  return false;
+}
+
 export function PdfViewer() {
   const { compileResult, isCompiling, currentProject } = useEditorStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,28 +51,19 @@ export function PdfViewer() {
       setPageNumber(1);
       setRenderError(null);
 
-      const loadingTask = pdfjsLib.getDocument({ data: bytes });
-      localLoadingTask = loadingTask;
-
       try {
+        const loadingTask = pdfjsLib.getDocument({ data: bytes });
+        localLoadingTask = loadingTask;
+
         const doc = await loadingTask.promise;
         if (isMounted) {
           setPdfDoc(doc);
           setTotalPages(doc.numPages);
-        } else {
-          // @ts-expect-error Types are missing destroy
-          doc.destroy();
         }
       } catch (err: unknown) {
         if (!isMounted) return;
 
-        if (
-          err &&
-          typeof err === "object" &&
-          "name" in err &&
-          (err.name === "RenderingCancelledException" ||
-            err.name === "PromiseCancelledException")
-        ) {
+        if (isPdfCancellationError(err)) {
           return;
         }
 
@@ -72,14 +73,23 @@ export function PdfViewer() {
       }
     };
 
-    loadDoc();
+    void loadDoc().catch((err) => {
+      if (isMounted) {
+        console.error("Unexpected loadDoc error", err);
+      }
+    });
 
     return () => {
       isMounted = false;
       if (localLoadingTask) {
+        const taskToDestroy = localLoadingTask;
         destroyPromiseRef.current = destroyPromiseRef.current
-          .then(() => localLoadingTask!.destroy())
-          .catch(() => {});
+          .then(() => taskToDestroy.destroy())
+          .catch((err) => {
+            if (!isPdfCancellationError(err)) {
+              console.error("PDF load task destruction error", err);
+            }
+          });
       }
     };
   }, [compileResult?.pdfBytes]);

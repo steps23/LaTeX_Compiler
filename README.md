@@ -9,7 +9,7 @@ TeXForge is a modern online LaTeX editor built as a React/Vite SPA. It focuses o
 - **Compilation:** Uses a robust remote HTTP compilation fallback to ensure valid PDFs are produced without requiring heavy local WASM assets or a Docker backend.
 - **Editor:** Integrated Monaco Editor with local worker scripts for performance.
 - **PDF Viewer:** A basic, single-page PDF viewer using a locally imported PDF.js worker.
-- **Collaboration:** Currently a single-player, offline-first experience. No real-time collaboration features are implemented.
+- **Collaboration:** Currently a single-player, local-persistence-first experience, with remote compilation currently required. No real-time collaboration features are implemented.
 - **Desktop:** The planned Tauri/Desktop application is not yet implemented.
 
 ## Directory Structure
@@ -24,6 +24,7 @@ TeXForge is a modern online LaTeX editor built as a React/Vite SPA. It focuses o
 
 ## Known Limitations
 
+- **Compilation**: The fallback remote compiler only supports the main content block, assigns the name `document.tex` unconditionally, and forces `pdfLaTeX`. It does not support complex multi-file structures recursively.
 - SyncTeX is not currently available from the HTTP compilation fallback.
 - The PDF Viewer renders only a single active page at a time.
 - No real-time collaboration capabilities.

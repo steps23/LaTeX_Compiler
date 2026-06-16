@@ -27,6 +27,6 @@ L'applicazione adesso compila e subisce l'esecuzione di test pulita.
 
 - Risolto memory leak in `PdfViewer.tsx` causato dalla mancata cancellazione progressiva e ordinata dei task asincroni (`loadingTask` e `renderTask`). Implementato lifecycle completamente serializzato.
 - Rimossa la dipendenza esterna unpkg CDN del worker di `pdfjs-dist` rendendo l'import gestito interamente da Vite localmente.
-- Risolto difetto nel `onDidChangeModel` di Monaco, dove i view state tra i file non venivano opportunamente ripristinati simulando il vero cambio prop di file.
+- Risolto difetto nel `onDidChangeModel` di Monaco, simulando il vero cambio prop di file e validando gli effettivi store.
 - Implementati test rigorosi che coprono il workflow completo Monaco `f1 -> f2 -> f1` e validano l'effettivo ripristino di `ICodeEditorViewState`.
-- Aggiunto hook GitHub Action `ci.yml` per validazione di push o PR per assicurare che il branch `main` sia sempre certificato. L'applicazione adesso compila con successo su CI tramite `npm ci`, test passanti, lint e build corretti.
+- I test di CI (linting, test unitari, e check type) sono stati passati con successo nell'ambiente sandbox dell'agente. Il workflow GitHub Actions è configurato, ma il relativo run pubblico non è stato ancora verificato.

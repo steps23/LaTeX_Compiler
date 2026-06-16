@@ -18,15 +18,15 @@
 - [x] Rimossi global suppressions per ResizeObserver.
 - [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor` e integrati Fake timers e strict mode typechecks e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
-- [x] GitHub Action per CI (lint, format, test, build).
+- [x] GitHub Action configurata (I gate sono passati nella sandbox, da verificare sul run pubblico).
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 
 - [ ] **Fase 1**: Inizializzazione Tauri v2 su macOS Apple Silicon e impostazione del Workspace.
 - [ ] **Fase 2**: Implementare storage Rust-based `SQLite` e FileSystem, sostituendo IndexedDB per il Local mode.
-- [ ] **Fase 3**: Costruire l'Astraziore in Rust del Compiler per usare nativamente `latexmk` ignorando `HttpFallbackCompiler`.
+- [ ] **Fase 3**: Costruire l'Astrazione in Rust del Compiler per usare nativamente `latexmk` ignorando `HttpFallbackCompiler`.
 - [ ] **Fase 4**: Integrare il supporto a SyncTeX in viewer e `texlab` LSP per Monaco editor.
 - [ ] **Fase 5**: Sviluppare modulo di Sync LAN zero-config (Yjs basato su proxy Rust P2P).
-- [ ] **Fase 6**: Notarization Apple e build locale di distribuzione (`.dmg`).
+- [ ] **Fase 6**: Notarizzazione Apple e build locale di distribuzione (`.dmg`).
 
-_Nota: tutte le vecchie fasi che prevedevano l'integrazione Google Auth e consumazione API Drive sono state sopsese (abbandonate) in favore dello switch ad Architettura Desktop Offline-First._
+_Nota: tutte le vecchie fasi che prevedevano l'integrazione Google Auth e consumazione API Drive sono state sospese in favore dello switch ad Architettura Desktop Local-First._
