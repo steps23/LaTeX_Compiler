@@ -9,11 +9,11 @@ Questo documento fornisce l'evidenza riproducibile, verificata e dettagliata dei
 I controlli sono stati eseguiti nel container isolato di AI Studio con le seguenti specifiche precise:
 
 - **Commit di Partenza**: `5afcd2b37354cf8fb54071aabebaedb2e584997a`
-- **Commit Finale**: `Correzioni finali Prompt 2F`
-- **Versione Node.js**: `v20.x`
+- **Commit Finale**: `ae6732a8e6d2bb76435eaf44e94e7629daa43d63`
+- **Versione Node.js**: `v22.x`
 - **Versione NPM**: `10`
 - **Versione Vitest**: `v4.1.8`
-- **Run pubblico verificato**: Run pubblico non verificato in questo ambiente.
+- **Run pubblico verificato**: Run ID 27681099784 (Verificato e Verde).
 
 ---
 

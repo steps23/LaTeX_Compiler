@@ -61,7 +61,7 @@ describe("PdfViewer", () => {
   let originalGetContext: typeof HTMLCanvasElement.prototype.getContext;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     activeDeferreds = [];
     originalGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = vi
@@ -407,7 +407,7 @@ describe("PdfViewer", () => {
     cancelError.name = "RenderingCancelledException";
     renderDeferred.reject(cancelError);
 
-    await new Promise((r) => setTimeout(r, 10));
+    await act(async () => await Promise.resolve());
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     unmount();
@@ -665,7 +665,7 @@ describe("PdfViewer", () => {
       taskB.resolveDoc(77);
     });
 
-    await new Promise((r) => setTimeout(r, 10));
+    await act(async () => await Promise.resolve());
 
     expect(screen.getByText(/Page 1 of 10/i)).toBeTruthy();
     expect(screen.queryByText(/Page 1 of 77/i)).toBeNull();
@@ -893,7 +893,7 @@ describe("PdfViewer", () => {
     settleMockTask(mock4);
   });
 
-  it("handles failure of loadingTask.destroy synchronously/asynchronously and logs it without crashing", async () => {
+  it("handles asynchronous loadingTask.destroy rejection and logs it without crashing", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -917,7 +917,7 @@ describe("PdfViewer", () => {
     mock.destroySpy.mockRejectedValueOnce(new Error("Destroy failed"));
 
     unmount();
-    await new Promise((r) => setTimeout(r, 10)); // let promises settle
+    await act(async () => await Promise.resolve()); // let promises settle
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "PDF load task destruction error",
@@ -950,7 +950,7 @@ describe("PdfViewer", () => {
     act(() => mock.resolveDoc(1));
 
     await waitFor(() => expect(mock.destroySpy).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 10));
+    await act(async () => await Promise.resolve());
     expect(mock.destroySpy).toHaveBeenCalledTimes(1); // Still once
 
     settleMockTask(mock);
@@ -997,7 +997,7 @@ describe("PdfViewer", () => {
     unmount();
 
     await waitFor(() => expect(renderCancelSpy).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 10));
+    await act(async () => await Promise.resolve());
     settleMockTask(mock);
   });
 

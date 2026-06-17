@@ -18,11 +18,11 @@
 - [x] Rimossi global suppressions per ResizeObserver.
 - [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor`, strict mode typechecks integrati e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
-- [x] Il workflow GitHub Actions è configurato. I gate locali risultano superati; il run pubblico associato al commit deve essere registrato tramite SHA e Run ID prima di considerare la baseline CI pubblicamente verificata.
+- [x] Il workflow GitHub Actions è configurato. I gate locali risultano superati e il run pubblico 27681099784 associato al commit ae6732a8e6d2bb76435eaf44e94e7629daa43d63 è stato verificato ed è verde.
 
 ### Residui Tecnici Attivi (da `docs/AUDIT.md`)
 
-Gli ex-residui PDF sono stati indirizzati tramite estensioni mirate della suite di test e irrobustimento logico del lifecycle. Le verifiche locali confermano la stabilità di questi scenari basata su 42 test automatizzati passanti:
+Gli ex-residui PDF sono stati indirizzati tramite estensioni mirate della suite di test e irrobustimento logico del lifecycle. Le verifiche locali confermano la stabilità di questi scenari basata su 41 test automatizzati passanti:
 
 - [x] **Visibilità Documento in Fase di Distruzione (Risolto ✔)**: Azzeramento sincrono istantaneo del vecchio `pdfDoc` prima dello smaltimento asincrono del task.
 - [x] **Copertura Test Carenze PDF (Risolto ✔)**: Aggiunta copertura per fallimenti `getDocument`, rimozioni precoci di eventi e lifecycle post-unmount.
