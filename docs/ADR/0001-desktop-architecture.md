@@ -23,7 +23,7 @@ I pillar architetturali sono i seguenti:
    - Associazione ad un demone `texlab` controllato via `Sidecar` per LSP (Autocomplete, Definitions).
    - Mapping di `SyncTeX` tramite invocazione bridge Rust per gestire i marker del compilatore ed associare codice a Viewer PDF.
 4. **Sicurezza e App Distribution**:
-   - Compilazione targetizzata puramente ad `aarch64-apple-darwin` usando le features di macos gatekeeper bypass (Code Signing e Apple Notarization pre-configurati nei tools CI).
+   - Compilazione targetizzata puramente ad `aarch64-apple-darwin` usando le features di sicurezza native di macOS (Code Signing con Developer ID, Hardened Runtime e Apple Notarization pre-configurati nei tools CI).
 
 ## Conseguenze
 

@@ -22,7 +22,7 @@ Data: L'audit è stato completato per stabilizzare la base di codice e rimuovere
 - I file associati a Drive utilizzano soft-delete (`deletedAt`) e le code atomiche tramite operazione `delete-file` della transazione per garantire consistenza futura.
 - Nota: la coda `syncQueue` non viene attualmente consumata. L'integrazione Google Auth e Syncing con le vere API Drive non è ancora implementata.
 
-L'applicazione adesso compila e i test vengono eseguiti senza errori.
+L'applicazione ora compila in locale e i test passano senza errori nell'ambiente di sviluppo.
 
 ## Stabilizzazione Baseline
 
@@ -30,13 +30,33 @@ L'applicazione adesso compila e i test vengono eseguiti senza errori.
 - Rimossa la dipendenza esterna unpkg CDN del worker di `pdfjs-dist` rendendo l'import gestito interamente da Vite localmente.
 - Risolto difetto nel `onDidChangeModel` di Monaco, simulando il vero cambio prop di file e validando gli effettivi store.
 - Implementati test rigorosi che coprono il workflow completo Monaco `f1 -> f2 -> f1` e validano l'effettivo ripristino di `ICodeEditorViewState`.
-- I test di CI (linting, test unitari, e controllo dei tipi) sono stati passati con successo nell'ambiente sandbox dell'agente. Il workflow GitHub Actions è configurato, ma il relativo run pubblico non è stato ancora verificato.
+- I test di CI (linting, test unitari, e controllo dei tipi) passano nell'ambiente di sviluppo locale. Sono state verificate le seguenti esecuzioni:
+  - `npm run format:check` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
+  - `npm run typecheck` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
+  - `npm run lint` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
+  - `npm test` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
+  - `npm run build` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
+  - Il workflow GitHub Actions (aggiornato alle versioni v6 di checkout/setup-node compatibili col runtime target) è configurato per confermare questi risultati al nuovo run pubblico.
 
-## Residui del Baseline (Da Classificare)
+## Analisi Vulnerabilità `npm audit` (17/06/2026)
+
+L'esecuzione di `npm audit --json` ha rilevato 4 vulnerabilità, così classificate:
+
+1. `dompurify` in `monaco-editor` (1 Bassa, 1 Moderata):
+   - **Dipendenza**: transitiva.
+   - **Impatto sul runtime desktop/web**: La libreria `monaco-editor` utilizza internamente DOMPurify, ma l'app riposa all'interno di un'architettura React che limita le iniezioni di modelli utente non sicure.
+   - **Fix e Breaking changes**: un `npm audit fix --force` imporrebbe il downgrade di `monaco-editor` (versione attesa 0.55.1 ad una potenziale fixing version passata con breaking changes imprevisti). Ignorata per stabilita' baseline.
+2. `esbuild` usato da `vite` (2 Alte):
+   - **Dipendenza**: transitoria ma usata nei tool build server locali (`package.json > devDependencies`).
+   - **Impatto**: L'avviso riguarda una fail della Deno integrity registry verification. Poiché l'app desktop Node.js/Vite non dipende dall'ambiente Deno, l'impatto malevolo è nullo per l'app desktop.
+   - **Fix e Breaking changes**: L'aggiornamento imporrebbe esbuild `0.28.1` / vite ^8. L'upgrade maggiore viene documentato ma posticipato al netto del corretto setup del workflow senza regredire.
+
+## Residui del Baseline Classificati
 
 Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispettive valutazioni e fasi consigliate per la risoluzione.
 
 ### 1. Test PdfViewer A → B → C: Verifica Argomenti
+
 - **Descrizione**: Il test verifica solo il numero complessivo delle chiamate a `getDocument` (che siano 2) senza asserire che la seconda riceva realmente i byte del file C.
 - **Gravità**: Bassa.
 - **Impatto**: Refactoring e modifiche al codice testuale.
@@ -45,6 +65,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri oppure durante Fase 4.
 
 ### 2. Visibilità Documento in Fase di Distruzione
+
 - **Descrizione**: Il vecchio `pdfDoc` rimane attivo nell'interfaccia mentre il nuovo task attende la distruzione asincrona del task precedente, aprendo al rischio che un utente interagisca o riavvii un rendering su un documento obsoleto avviato verso il dismount.
 - **Gravità**: Media.
 - **Impatto**: Possibili errori a runtime causati da tentativi di render su page worker distrutti.
@@ -53,6 +74,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
 
 ### 3. Catch del Rendering: Rigetti non-Error
+
 - **Descrizione**: Se `renderDeferred.reject()` dovesse intercettare e scatenare un errore non associato all'istanza `Error`, il catch fallirebbe la sua traduzione.
 - **Gravità**: Bassa.
 - **Impatto**: Il messaggio d'errore fallirebbe il display nella UI e l'eccezione potrebbe diffondersi.
@@ -61,6 +83,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
 
 ### 4. Deferred Irrisolte
+
 - **Descrizione**: Alcune Deferred esplicite rimangono irrisolte al termine dell'unmount del componente all'interno dei test asincroni, creando un teardown impuro.
 - **Gravità**: Bassa.
 - **Impatto**: Test legati alla validazione memory leak rischiano warning asincroni o overhead del runner Vitest.
@@ -69,6 +92,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
 
 ### 5. Copertura Test Carenze PDF
+
 - **Descrizione**: Errori sincroni in getDocument, fallimento hard di `loadingTask.destroy()`, gestione `PromiseCancelledException` in fetch phase e controlli che i `setState` non operino dopo unmount restano inesplorati.
 - **Gravità**: Media.
 - **Impatto**: Maggiore rischio di false confidence della code quality basata solo sulla coverage formale di render success rate.
@@ -77,6 +101,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
 
 ### 6. Controllo Callback Monaco Editor
+
 - **Descrizione**: Il test Monaco testa la result formale e non i flow intermedi di esecuzione di `onDidChangeModel` per validarne tempi ed indici delle chiamate.
 - **Gravità**: Bassa.
 - **Impatto**: Nessuno pratico sull'output ma disaccoppiamento dalle promesse comportamentali del lifecycle di React nel proxy Editor.
