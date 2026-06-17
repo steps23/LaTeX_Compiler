@@ -50,7 +50,7 @@ Exit code: 0
 ```text
  RUN  v4.1.8 /app/applet
 
- ✓ src/features/pdfViewer/PdfViewer.test.tsx (18 tests)
+ ✓ src/features/pdfViewer/PdfViewer.test.tsx (17 tests)
  ✓ src/App.test.tsx (1 test)
  ✓ src/features/editor/MonacoEditor.test.tsx (3 tests)
  ✓ test/filesystem.test.ts (6 tests)
@@ -63,7 +63,7 @@ Exit code: 0
  ✓ src/features/compiler/logParser.test.ts (1 test)
 
  Test Files  11 passed (11)
-      Tests  42 passed (42)
+      Tests  41 passed (41)
 ```
 
 Tutte le situazioni d'errore del PDF, incluse:

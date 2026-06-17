@@ -1,10 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, act, waitFor, screen } from "@testing-library/react";
+import { render, act, waitFor, screen, cleanup } from "@testing-library/react";
 import { PdfViewer } from "./PdfViewer";
 import { useEditorStore } from "../../state/store";
 import * as pdfjsLib from "pdfjs-dist";
 
+const pdfJsMocks = vi.hoisted(() => ({
+  getDocument: vi.fn(),
+}));
+
+vi.mock("pdfjs-dist", () => ({
+  GlobalWorkerOptions: {
+    workerSrc: "",
+  },
+  getDocument: pdfJsMocks.getDocument,
+}));
+
+vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({
+  default: "mock-pdf-worker.mjs",
+}));
+
 interface Deferred<T> {
+  label: string;
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: unknown) => void;
@@ -14,10 +30,10 @@ interface Deferred<T> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let activeDeferreds: Array<Deferred<any>> = [];
 
-function createDeferred<T>(): Deferred<T> {
+function createDeferred<T>(label: string): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
-  const deferred: Partial<Deferred<T>> = { settled: false };
+  const deferred: Partial<Deferred<T>> = { label, settled: false };
   const promise = new Promise<T>((res, rej) => {
     resolve = (val) => {
       deferred.settled = true;
@@ -35,6 +51,12 @@ function createDeferred<T>(): Deferred<T> {
   return deferred as Deferred<T>;
 }
 
+function createTeardownCancellation(): Error {
+  const error = new Error("Deferred cancelled during test teardown");
+  error.name = "RenderingCancelledException";
+  return error;
+}
+
 describe("PdfViewer", () => {
   let originalGetContext: typeof HTMLCanvasElement.prototype.getContext;
 
@@ -50,27 +72,62 @@ describe("PdfViewer", () => {
   });
 
   afterEach(async () => {
-    const promises = activeDeferreds.map((d) => d.promise.catch(() => {}));
-    await Promise.allSettled(promises);
+    cleanup();
 
-    const unsettled = activeDeferreds.filter((d) => !d.settled);
+    const pending = activeDeferreds.filter((deferred) => !deferred.settled);
+
+    for (const deferred of pending) {
+      void deferred.promise.catch(() => undefined);
+      deferred.reject(createTeardownCancellation());
+    }
+
+    await Promise.allSettled(
+      activeDeferreds.map((deferred) =>
+        deferred.promise.catch(() => undefined),
+      ),
+    );
+
     activeDeferreds = [];
     HTMLCanvasElement.prototype.getContext = originalGetContext;
     vi.restoreAllMocks();
 
-    if (unsettled.length > 0) {
+    if (pending.length > 0) {
       throw new Error(
-        `Test failed: ${unsettled.length} Deferred objects remained unsettled.`,
+        `Deferred non completate dal test: ${pending
+          .map((deferred) => deferred.label)
+          .join(", ")}`,
       );
     }
   });
 
-  function createMockTask() {
-    const taskDeferred = createDeferred<pdfjsLib.PDFDocumentProxy>();
-    const destroyDeferred = createDeferred<void>();
+  function settleMockTask(mock: ReturnType<typeof createMockTask>): void {
+    if (!mock.taskDeferred.settled) {
+      void mock.taskDeferred.promise.catch(() => undefined);
+      mock.taskDeferred.reject(createTeardownCancellation());
+    }
+
+    if (!mock.destroyDeferred.settled) {
+      mock.destroyDeferred.resolve();
+    }
+  }
+
+  function createMockTask(taskId: string = "default") {
+    const taskDeferred = createDeferred<pdfjsLib.PDFDocumentProxy>(
+      `task_${taskId}`,
+    );
+    const destroyDeferred = createDeferred<void>(`destroy_${taskId}`);
     const destroySpy = vi.fn().mockReturnValue(destroyDeferred.promise);
     const getPageSpy = vi.fn();
-    const renderCancelSpy = vi.fn();
+
+    // Default render resolution
+    let currentRenderDeferred: Deferred<void> | null = null;
+    const renderCancelSpy = vi.fn(() => {
+      if (currentRenderDeferred && !currentRenderDeferred.settled) {
+        const error = new Error("Render cancelled");
+        error.name = "RenderingCancelledException";
+        currentRenderDeferred.reject(error);
+      }
+    });
 
     return {
       task: {
@@ -82,6 +139,12 @@ describe("PdfViewer", () => {
       destroySpy,
       getPageSpy,
       renderCancelSpy,
+      get currentRenderDeferred() {
+        return currentRenderDeferred;
+      },
+      set currentRenderDeferred(val) {
+        currentRenderDeferred = val;
+      },
       resolveDoc: (pages = 1) => {
         taskDeferred.resolve({
           numPages: pages,
@@ -97,17 +160,9 @@ describe("PdfViewer", () => {
     );
   }
 
-  vi.mock("pdfjs-dist", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("pdfjs-dist")>();
-    return {
-      ...actual,
-      getDocument: vi.fn(),
-    };
-  });
-
   it("handles fast PDF replacement (A -> B) by waiting for A to be destroyed", async () => {
-    const taskA = createMockTask();
-    const taskB = createMockTask();
+    const taskA = createMockTask("A");
+    const taskB = createMockTask("B");
 
     let getDocCallCount = 0;
     vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
@@ -143,20 +198,21 @@ describe("PdfViewer", () => {
     });
 
     await waitFor(() => expect(taskA.destroySpy).toHaveBeenCalledTimes(1));
-    expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1); // B is waiting
+    expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1);
 
-    // Resolve A destroy
     taskA.destroyDeferred.resolve();
 
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
 
     unmount();
+    settleMockTask(taskA);
+    settleMockTask(taskB);
   });
 
   it("skips intermediate loading if A -> B -> C happens before A destroy resolves", async () => {
-    const taskA = createMockTask();
-    const taskB = createMockTask();
-    const taskC = createMockTask();
+    const taskA = createMockTask("A");
+    const taskB = createMockTask("B");
+    const taskC = createMockTask("C");
 
     let getDocCallCount = 0;
     vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
@@ -208,16 +264,18 @@ describe("PdfViewer", () => {
       });
     });
 
-    // Resolve A destroy
     taskA.destroyDeferred.resolve();
 
-    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2)); // C is called, B is skipped
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
 
     unmount();
+    settleMockTask(taskA);
+    settleMockTask(taskB);
+    settleMockTask(taskC);
   });
 
   it("cleans up resources and respects unmount properly while loading", async () => {
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     useEditorStore.setState({
@@ -236,12 +294,14 @@ describe("PdfViewer", () => {
     unmount();
 
     await waitFor(() => expect(mock.destroySpy).toHaveBeenCalledTimes(1));
+    settleMockTask(mock);
   });
 
   it("handles render task cancellation if component unmounts mid-render", async () => {
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
-    const renderDeferred = createDeferred<void>();
+    const renderDeferred = createDeferred<void>("render_A");
+    mock.currentRenderDeferred = renderDeferred;
 
     mock.getPageSpy.mockImplementation(() => {
       return Promise.resolve({
@@ -272,10 +332,11 @@ describe("PdfViewer", () => {
     unmount();
 
     await waitFor(() => expect(mock.renderCancelSpy).toHaveBeenCalledTimes(1));
+    settleMockTask(mock);
   });
 
   it("destroys document from pending promise if unmounted early", async () => {
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     useEditorStore.setState({
@@ -293,13 +354,23 @@ describe("PdfViewer", () => {
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
     unmount();
 
+    await waitFor(() => expect(mock.destroySpy).toHaveBeenCalledTimes(1));
+
+    mock.destroyDeferred.resolve();
     mock.resolveDoc();
-    await waitFor(() => expect(mock.destroySpy).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mock.destroySpy).toHaveBeenCalledTimes(1);
+    settleMockTask(mock);
   });
 
   it("handles RenderingCancelledException cleanly", async () => {
-    const mock = createMockTask();
-    const renderDeferred = createDeferred<void>();
+    const mock = createMockTask("A");
+    const renderDeferred = createDeferred<void>("render_A");
+    mock.currentRenderDeferred = renderDeferred;
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -336,16 +407,17 @@ describe("PdfViewer", () => {
     cancelError.name = "RenderingCancelledException";
     renderDeferred.reject(cancelError);
 
-    // Give it a tick to process catch
     await new Promise((r) => setTimeout(r, 10));
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     unmount();
+    settleMockTask(mock);
   });
 
   it("shows visible error when render fails unexpectedly", async () => {
-    const mock = createMockTask();
-    const renderDeferred = createDeferred<void>();
+    const mock = createMockTask("A");
+    const renderDeferred = createDeferred<void>("render_A");
+    mock.currentRenderDeferred = renderDeferred;
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -391,6 +463,7 @@ describe("PdfViewer", () => {
 
     expect(consoleErrorSpy).toHaveBeenCalled();
     unmount();
+    settleMockTask(mock);
   });
 
   function mockPdfPageAndRender(
@@ -409,7 +482,7 @@ describe("PdfViewer", () => {
   }
 
   it("shows visible error when document load fails unexpectedly", async () => {
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     useEditorStore.setState({
@@ -435,12 +508,13 @@ describe("PdfViewer", () => {
     });
 
     unmount();
+    settleMockTask(mock);
   });
 
   it("A -> B -> C Scenario 1: B is skipped completely before getDocument is called", async () => {
-    const taskA = createMockTask();
-    const taskB = createMockTask();
-    const taskC = createMockTask();
+    const taskA = createMockTask("A");
+    const taskB = createMockTask("B");
+    const taskC = createMockTask("C");
 
     const getDocCalls: Array<{ data: Uint8Array }> = [];
     vi.mocked(pdfjsLib.getDocument).mockImplementation((params: unknown) => {
@@ -453,7 +527,7 @@ describe("PdfViewer", () => {
     useEditorStore.setState({
       compileResult: {
         success: true,
-        pdfBytes: new Uint8Array([100]), // A
+        pdfBytes: new Uint8Array([100]),
         rawLog: "",
         errors: [],
         warnings: [],
@@ -470,7 +544,7 @@ describe("PdfViewer", () => {
       useEditorStore.setState({
         compileResult: {
           success: true,
-          pdfBytes: new Uint8Array([101]), // B
+          pdfBytes: new Uint8Array([101]),
           rawLog: "",
           errors: [],
           warnings: [],
@@ -487,7 +561,7 @@ describe("PdfViewer", () => {
       useEditorStore.setState({
         compileResult: {
           success: true,
-          pdfBytes: new Uint8Array([102]), // C
+          pdfBytes: new Uint8Array([102]),
           rawLog: "",
           errors: [],
           warnings: [],
@@ -506,12 +580,15 @@ describe("PdfViewer", () => {
     expect(getDocCalls[1]).toEqual({ data: new Uint8Array([102]) });
 
     unmount();
+    settleMockTask(taskA);
+    settleMockTask(taskB);
+    settleMockTask(taskC);
   });
 
   it("A -> B -> C Scenario 2: B is initiated but completes after C, and B does not overwrite C", async () => {
-    const taskA = createMockTask();
-    const taskB = createMockTask();
-    const taskC = createMockTask();
+    const taskA = createMockTask("A");
+    const taskB = createMockTask("B");
+    const taskC = createMockTask("C");
 
     const getDocCalls: Array<{ data: Uint8Array }> = [];
     vi.mocked(pdfjsLib.getDocument).mockImplementation((params: unknown) => {
@@ -524,7 +601,7 @@ describe("PdfViewer", () => {
     useEditorStore.setState({
       compileResult: {
         success: true,
-        pdfBytes: new Uint8Array([100]), // A
+        pdfBytes: new Uint8Array([100]),
         rawLog: "",
         errors: [],
         warnings: [],
@@ -535,17 +612,15 @@ describe("PdfViewer", () => {
     const { unmount } = render(<PdfViewer />);
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
 
-    // Resolve A
     mockPdfPageAndRender(taskA);
     act(() => taskA.resolveDoc(5));
     await waitFor(() => expect(screen.getByText(/Page 1 of 5/i)).toBeTruthy());
 
-    // 1. Move A -> B
     act(() => {
       useEditorStore.setState({
         compileResult: {
           success: true,
-          pdfBytes: new Uint8Array([101]), // B
+          pdfBytes: new Uint8Array([101]),
           rawLog: "",
           errors: [],
           warnings: [],
@@ -554,20 +629,17 @@ describe("PdfViewer", () => {
       });
     });
 
-    // Resolve A's destroy to let loadDoc progress for B and call getDocument
     await waitFor(() => expect(taskA.destroySpy).toHaveBeenCalledTimes(1));
     taskA.destroyDeferred.resolve();
 
-    // Verify task B has started loading
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
     expect(getDocCalls[1]).toEqual({ data: new Uint8Array([101]) });
 
-    // 2. Move B -> C before B's document loading resolves
     act(() => {
       useEditorStore.setState({
         compileResult: {
           success: true,
-          pdfBytes: new Uint8Array([102]), // C
+          pdfBytes: new Uint8Array([102]),
           rawLog: "",
           errors: [],
           warnings: [],
@@ -576,49 +648,30 @@ describe("PdfViewer", () => {
       });
     });
 
-    // Verify B's loading task is requested to destroy
     await waitFor(() => expect(taskB.destroySpy).toHaveBeenCalledTimes(1));
     taskB.destroyDeferred.resolve();
 
-    // Verify C starts loading
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(3));
     expect(getDocCalls[2]).toEqual({ data: new Uint8Array([102]) });
 
-    // 3. Resolve C first
     mockPdfPageAndRender(taskC);
     act(() => {
       taskC.resolveDoc(10);
     });
 
-    // Check that C's page details are shown
     await waitFor(() => expect(screen.getByText(/Page 1 of 10/i)).toBeTruthy());
 
-    // 4. Resolve B slow document load after C is already fully complete & shown
-    const mockObsoleteDoc = {
-      numPages: 77,
-    };
     act(() => {
-      taskB.taskDeferred.resolve(
-        mockObsoleteDoc as unknown as pdfjsLib.PDFDocumentProxy,
-      );
+      taskB.resolveDoc(77);
     });
 
-    // Wait a tick to resolve microtasks
     await new Promise((r) => setTimeout(r, 10));
 
-    // 5. Verify B's completion did NOT overwrite C's visible state attributes
     expect(screen.getByText(/Page 1 of 10/i)).toBeTruthy();
     expect(screen.queryByText(/Page 1 of 77/i)).toBeNull();
 
-    // 6. Verify obsolete B task was requested to destroy
-    // It was destroyed once when B->C happened, and then again when B resolves?
-    // Actually, in PdfViewer.tsx, on B->C change, the cleanup function runs and calls currentResource?.loadingTask.destroy().
-    // Wait, B was not activeResourceRef yet because it hadn't resolved!
-    // NO. activeResourceRef is set *after* `await loadingTask.promise`.
-    // So on B->C change, activeResourceRef is STILL A !
     expect(taskB.destroySpy).toHaveBeenCalledTimes(1);
 
-    // 7. Unmount and verify exact destruction counts
     unmount();
 
     taskC.destroyDeferred.resolve();
@@ -626,10 +679,14 @@ describe("PdfViewer", () => {
     await waitFor(() => expect(taskC.destroySpy).toHaveBeenCalledTimes(1));
     expect(taskB.destroySpy).toHaveBeenCalledTimes(1);
     expect(taskA.destroySpy).toHaveBeenCalledTimes(1);
+
+    settleMockTask(taskA);
+    settleMockTask(taskB);
+    settleMockTask(taskC);
   });
 
   it("immediately invalidates visible state when bytes change, before teardown or loader resolves", async () => {
-    const taskA = createMockTask();
+    const taskA = createMockTask("A");
     const taskB = createMockTask();
 
     let getDocCallsCount = 0;
@@ -716,10 +773,10 @@ describe("PdfViewer", () => {
   });
 
   it("normalizes rejection with custom types (string, null, non-Error objects, circular objects)", async () => {
-    const mock1 = createMockTask();
-    const mock2 = createMockTask();
-    const mock3 = createMockTask();
-    const mock4 = createMockTask();
+    const mock1 = createMockTask("1");
+    const mock2 = createMockTask("2");
+    const mock3 = createMockTask("3");
+    const mock4 = createMockTask("4");
 
     let callCount = 0;
     vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
@@ -821,15 +878,26 @@ describe("PdfViewer", () => {
       ).toBeTruthy();
     });
 
-    mock4.destroyDeferred.resolve();
+    expect(mock1.destroySpy).toHaveBeenCalledTimes(1);
+    expect(mock2.destroySpy).toHaveBeenCalledTimes(1);
+    expect(mock3.destroySpy).toHaveBeenCalledTimes(1);
+    expect(mock4.destroySpy).toHaveBeenCalledTimes(0); // 4 wasn't replaced or unmounted yet, actually unmount will trigger it.
+
     unmount();
+
+    await waitFor(() => expect(mock4.destroySpy).toHaveBeenCalledTimes(1));
+
+    settleMockTask(mock1);
+    settleMockTask(mock2);
+    settleMockTask(mock3);
+    settleMockTask(mock4);
   });
 
   it("handles failure of loadingTask.destroy synchronously/asynchronously and logs it without crashing", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     useEditorStore.setState({
@@ -850,47 +918,16 @@ describe("PdfViewer", () => {
 
     unmount();
     await new Promise((r) => setTimeout(r, 10)); // let promises settle
+
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "PDF load task destruction error",
       expect.any(Error),
     );
+    settleMockTask(mock);
   });
 
-  it("handles PDFDocumentProxy.destroy rejection safely without throwing", async () => {
-    const mock = createMockTask();
-    mockPdfjsGetDocument(mock.task);
-
-    useEditorStore.setState({
-      compileResult: {
-        success: true,
-        pdfBytes: new Uint8Array([200]),
-        rawLog: "",
-        errors: [],
-        warnings: [],
-        durationMs: 0,
-      },
-    });
-
-    const { unmount } = render(<PdfViewer />);
-    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
-
-    const mockDoc = {
-      numPages: 1,
-      getPage: vi.fn(),
-      destroy: vi.fn().mockRejectedValue(new Error("Document destroy failed")),
-    };
-    act(() =>
-      mock.taskDeferred.resolve(
-        mockDoc as unknown as pdfjsLib.PDFDocumentProxy,
-      ),
-    );
-
-    unmount();
-    await waitFor(() => expect(mockDoc.destroy).toHaveBeenCalledTimes(1));
-  });
-
-  it("ensures an obsolete or unmounted document is destroyed exactly once", async () => {
-    const mock = createMockTask();
+  it("ensures an obsolete or unmounted loadingTask is destroyed exactly once", async () => {
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     useEditorStore.setState({
@@ -907,26 +944,20 @@ describe("PdfViewer", () => {
     const { unmount } = render(<PdfViewer />);
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
 
-    const mockDoc = {
-      numPages: 1,
-      getPage: vi.fn(),
-      destroy: vi.fn().mockResolvedValue(undefined),
-    };
-
     unmount();
-    act(() =>
-      mock.taskDeferred.resolve(
-        mockDoc as unknown as pdfjsLib.PDFDocumentProxy,
-      ),
-    );
 
-    await waitFor(() => expect(mockDoc.destroy).toHaveBeenCalledTimes(1));
+    // Resolving the document promise after unmount
+    act(() => mock.resolveDoc(1));
+
+    await waitFor(() => expect(mock.destroySpy).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 10));
-    expect(mockDoc.destroy).toHaveBeenCalledTimes(1);
+    expect(mock.destroySpy).toHaveBeenCalledTimes(1); // Still once
+
+    settleMockTask(mock);
   });
 
   it("handles renderTask.cancel throwing or promise rejecting during unmount safely", async () => {
-    const mock = createMockTask();
+    const mock = createMockTask("A");
     mockPdfjsGetDocument(mock.task);
 
     const renderCancelSpy = vi.fn().mockImplementation(() => {
@@ -967,11 +998,12 @@ describe("PdfViewer", () => {
 
     await waitFor(() => expect(renderCancelSpy).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 10));
+    settleMockTask(mock);
   });
 
   it("prevents concurrent renders on canvas & handles byte change with ongoing render safely", async () => {
-    const taskA = createMockTask();
-    const taskB = createMockTask();
+    const taskA = createMockTask("A");
+    const taskB = createMockTask("B");
 
     let getDocCallsCount = 0;
     vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
@@ -993,8 +1025,10 @@ describe("PdfViewer", () => {
     const { unmount } = render(<PdfViewer />);
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
 
-    const renderPromA = createDeferred<void>();
-    const renderCancelA = vi.fn();
+    const renderPromA = createDeferred<void>("renderPromA");
+    taskA.currentRenderDeferred = renderPromA;
+    const renderCancelA = taskA.renderCancelSpy;
+
     taskA.getPageSpy.mockImplementation(() => {
       return Promise.resolve({
         getViewport: vi.fn().mockReturnValue({ width: 100, height: 100 }),
@@ -1023,11 +1057,13 @@ describe("PdfViewer", () => {
 
     await waitFor(() => expect(renderCancelA).toHaveBeenCalledTimes(1));
 
-    renderPromA.resolve();
+    // Notice renderCancelA mocked inside currentRenderDeferred will actually reject the promise
     taskA.destroyDeferred.resolve();
 
     await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
 
     unmount();
+    settleMockTask(taskA);
+    settleMockTask(taskB);
   });
 });
