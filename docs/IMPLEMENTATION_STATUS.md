@@ -8,7 +8,7 @@
 - [x] Isolamento store (Zustand) e design architetturale dell'app.
 - [x] Typings per errori e contesti render (canvas API).
 
-## Debito Tecnico Pre-Migrazione (Completato)
+## Baseline tecnica completata — residui pre-migrazione aperti
 
 - [x] Risolto Type error in `server/auth.ts` (modificato/rimosso).
 - [x] Risolto Type error su Monaco in `MonacoEditor.test.tsx` e file accessori.
@@ -18,7 +18,20 @@
 - [x] Rimossi global suppressions per ResizeObserver.
 - [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor`, strict mode typechecks integrati e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
-- [x] GitHub Action configurata e test pre-push passati nell'ambiente di sviluppo locale. (L'esito e il Run ID del workflow pubblico associato al commit non sono confermabili direttamente in quanto non esiste un runner di autenticazione `gh` CLI nell'ambiente dell'agente).
+- [x] Il workflow GitHub Actions è configurato. I gate locali risultano superati; il run pubblico associato al commit deve essere registrato tramite SHA e Run ID prima di considerare la baseline CI pubblicamente verificata.
+
+### Residui Tecnici Attivi (da `docs/AUDIT.md`)
+
+Sebbene la baseline tecnica sia consolidata sia per TypeScript che per il runtime, sono presenti 6 residui attivi qualificati pre-migrazione con la seguente catalogazione e blocco:
+
+1. **Visibilità Documento in Fase di Distruzione (Gravità Media)** - _Bloccante prima di Tauri_: Il vecchio `pdfDoc` rimane temporaneamente visibile durante gli smantellamenti asincroni, rischiando azioni impreviste dell'utente. Deve essere risolto prioritariamente prima di collegare il backend Tauri nativo.
+2. **Copertura Test Carenze PDF (Gravità Media)** - _Bloccante prima di Tauri_: Mancano asserzioni per fallimenti critici sincroni di `getDocument` e riavvii forzati. Cruciale per assicurare la tolleranza ai guasti nell'interfaccia desktop.
+3. **Test PdfViewer A → B → C: Verifica Argomenti (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Il test verifica solo il conteggio delle chiamate a `getDocument` senza asseverare l'argomento esatto dei byte per il file C.
+4. **Catch del Rendering: Rigetti non-Error (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Gestione di rigetti asincroni non tipizzati in errore primario.
+5. **Deferred Irrisolte (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Gestione fine del teardown delle promesse in Vitest.
+6. **Controllo Callback Monaco Editor (Gravità Bassa)** - _Rinviabile alle fasi SyncTeX / LSP_: Validazione dettagliata di esecuzione di `onDidChangeModel` in Monaco.
+
+---
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 
