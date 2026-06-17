@@ -22,7 +22,7 @@ Data: L'audit è stato completato per stabilizzare la base di codice e rimuovere
 - I file associati a Drive utilizzano soft-delete (`deletedAt`) e le code atomiche tramite operazione `delete-file` della transazione per garantire consistenza futura.
 - Nota: la coda `syncQueue` non viene attualmente consumata. L'integrazione Google Auth e Syncing con le vere API Drive non è ancora implementata.
 
-L'applicazione ora compila in locale e i test passano senza errori nell'ambiente di sviluppo.
+La build dell'applicazione e i test vengono eseguiti con successo nell'ambiente di sviluppo locale. La compilazione dei documenti LaTeX resta invece dipendente dal servizio HTTP remoto (`texlive.net`).
 
 ## Stabilizzazione Baseline
 
@@ -30,7 +30,7 @@ L'applicazione ora compila in locale e i test passano senza errori nell'ambiente
 - Rimossa la dipendenza esterna unpkg CDN del worker di `pdfjs-dist` rendendo l'import gestito interamente da Vite localmente.
 - Risolto difetto nel `onDidChangeModel` di Monaco, simulando il vero cambio prop di file e validando gli effettivi store.
 - Implementati test rigorosi che coprono il workflow completo Monaco `f1 -> f2 -> f1` e validano l'effettivo ripristino di `ICodeEditorViewState`.
-- I test di CI (linting, test unitari, e controllo dei tipi) passano nell'ambiente di sviluppo locale. Sono state verificate le seguenti esecuzioni:
+- Gli stessi gate configurati nel workflow CI passano nell'ambiente di sviluppo locale. Sono state verificate le seguenti esecuzioni:
   - `npm run format:check` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
   - `npm run typecheck` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
   - `npm run lint` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
@@ -38,18 +38,12 @@ L'applicazione ora compila in locale e i test passano senza errori nell'ambiente
   - `npm run build` (Ambiente locale, Data: 17/06/2026, Exit Code 0)
   - Il workflow GitHub Actions (aggiornato alle versioni v6 di checkout/setup-node compatibili col runtime target) è configurato per confermare questi risultati al nuovo run pubblico.
 
-## Analisi Vulnerabilità `npm audit` (17/06/2026)
+## Analisi Vulnerabilità `npm audit`
 
-L'esecuzione di `npm audit --json` ha rilevato 4 vulnerabilità, così classificate:
+È stata eseguita un'analisi dettagliata tramite `npm audit --json`, documentata in `docs/security/NPM_AUDIT_2026-06-17.md`. In sintesi:
 
-1. `dompurify` in `monaco-editor` (1 Bassa, 1 Moderata):
-   - **Dipendenza**: transitiva.
-   - **Impatto sul runtime desktop/web**: La libreria `monaco-editor` utilizza internamente DOMPurify, ma l'app riposa all'interno di un'architettura React che limita le iniezioni di modelli utente non sicure.
-   - **Fix e Breaking changes**: un `npm audit fix --force` imporrebbe il downgrade di `monaco-editor` (versione attesa 0.55.1 ad una potenziale fixing version passata con breaking changes imprevisti). Ignorata per stabilita' baseline.
-2. `esbuild` usato da `vite` (2 Alte):
-   - **Dipendenza**: transitoria ma usata nei tool build server locali (`package.json > devDependencies`).
-   - **Impatto**: L'avviso riguarda una fail della Deno integrity registry verification. Poiché l'app desktop Node.js/Vite non dipende dall'ambiente Deno, l'impatto malevolo è nullo per l'app desktop.
-   - **Fix e Breaking changes**: L'aggiornamento imporrebbe esbuild `0.28.1` / vite ^8. L'upgrade maggiore viene documentato ma posticipato al netto del corretto setup del workflow senza regredire.
+1. `esbuild`: Dipendenza diretta di sviluppo e possibile dipendenza transitiva della toolchain (Vite). L'advisory (GHSA-gv7w-rqvm-qjhr) riguarda una vulnerabilità nel percorso Deno, che il progetto non utilizza (il flusso normale è Node/Vite). Mostra bassa o non rilevata sfruttabilità nel percorso corrente, ma gli aggiornamenti dovranno essere verificati con test appropriati senza usare `npm audit fix --force`.
+2. `dompurify` (usato da `monaco-editor`): Diverse vulnerabilità (es. GHSA-crv5-9vww-q3g8). Monaco fissa la versione di DOMPurify alla 3.2.7. L'impatto e la raggiungibilità non possono essere esclusi solo perché si usa React, ma dipendono dai code path di DOMPurify effettivamente usati. Eventuali aggiornamenti ("overrides" npm) dovranno essere testati; si mantiene temporaneamente documentando il rischio.
 
 ## Residui del Baseline Classificati
 

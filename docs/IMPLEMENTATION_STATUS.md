@@ -18,7 +18,7 @@
 - [x] Rimossi global suppressions per ResizeObserver.
 - [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor`, strict mode typechecks integrati e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
-- [x] GitHub Action configurata e test pre-push passati nell'ambiente di sviluppo locale (da verificare il risultato sul run pubblico dopo l'update a v6 delle actions).
+- [x] GitHub Action configurata e test pre-push passati nell'ambiente di sviluppo locale. (L'esito e il Run ID del workflow pubblico associato al commit non sono confermabili direttamente in quanto non esiste un runner di autenticazione `gh` CLI nell'ambiente dell'agente).
 
 ## Desktop / Tauri v2 Roadmap (Da Fare)
 

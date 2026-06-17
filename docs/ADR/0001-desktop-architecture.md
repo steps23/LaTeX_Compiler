@@ -18,12 +18,12 @@ I pillar architetturali sono i seguenti:
    - File System reale per contenere i `.tex` e assets (`fs` scope di Tauri limitato alla workspace scelta dall'utente). Abbandono di IndexedDB per il contenuto raw dei documenti.
    - Database interno asincrono per i **Metadati** (Progetti storici, tag, preferenze, history commit): utilizzo di **SQLite** manovrato da Rust (es. sqlx o rusqlite) in `~/Library/Application Support/...`.
 2. **Motore di Compilazione (TeX Live / MacTeX / latexmk)**:
-   - Integrazione nativa del binario presente a sistema oppure via container/sidecar isolation su macOS. Abbandono immediato del `HttpFallbackCompiler` in produzione per evitare lock-in ai servizi cloud (`texlive.net`).
+   - Integrazione nativa del binario presente a sistema. Il compilatore HTTP sarà escluso dal percorso desktop di produzione dopo l'implementazione e la validazione del compilatore locale.
 3. **Migliorie Editor (LSP & SyncTeX)**:
    - Associazione ad un demone `texlab` controllato via `Sidecar` per LSP (Autocomplete, Definitions).
    - Mapping di `SyncTeX` tramite invocazione bridge Rust per gestire i marker del compilatore ed associare codice a Viewer PDF.
 4. **Sicurezza e App Distribution**:
-   - Compilazione targetizzata puramente ad `aarch64-apple-darwin` usando le features di sicurezza native di macOS (Code Signing con Developer ID, Hardened Runtime e Apple Notarization pre-configurati nei tools CI).
+   - Compilazione targetizzata puramente ad `aarch64-apple-darwin`. Le funzionalità di sicurezza native di macOS (Code Signing con Developer ID, Hardened Runtime, Apple Notarization, stapling e verifica Gatekeeper) saranno implementate e verificate nella fase di packaging e release.
 
 ## Conseguenze
 
