@@ -16,7 +16,7 @@
 - [x] Ripulito codice morto (es. variabili non utilizzate).
 - [x] Sostituito caricamenti via CDN per Monaco, adozione pura di Worker build integrati.
 - [x] Rimossi global suppressions per ResizeObserver.
-- [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor` e integrati Fake timers e strict mode typechecks e rimosse dependency instabili (come name.match non boolean).
+- [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor`, strict mode typechecks integrati e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
 - [x] GitHub Action configurata (I gate sono passati nella sandbox, da verificare sul run pubblico).
 
