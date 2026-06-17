@@ -22,7 +22,7 @@
 
 ### Residui Tecnici Attivi (da `docs/AUDIT.md`)
 
-Pre-migrazione sono stati completati con successo tutti i 5 residui PDF bloccanti:
+Gli ex-residui PDF sono stati indirizzati tramite estensioni mirate della suite di test e irrobustimento logico del lifecycle. Le verifiche locali confermano la stabilità di questi scenari basata su 42 test automatizzati passanti:
 
 - [x] **Visibilità Documento in Fase di Distruzione (Risolto ✔)**: Azzeramento sincrono istantaneo del vecchio `pdfDoc` prima dello smaltimento asincrono del task.
 - [x] **Copertura Test Carenze PDF (Risolto ✔)**: Aggiunta copertura per fallimenti `getDocument`, rimozioni precoci di eventi e lifecycle post-unmount.

@@ -7,20 +7,32 @@ import { ZoomIn, ZoomOut, Download, AlertTriangle } from "lucide-react";
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 function isPdfCancellationError(err: unknown): boolean {
-  if (err && typeof err === "object" && "name" in err) {
+  if (err && typeof err === "object") {
+    const errObj = err as { name?: unknown; message?: unknown };
     return (
-      err.name === "RenderingCancelledException" ||
-      err.name === "PromiseCancelledException" ||
-      err.name === "Context2DException"
-    );
-  }
-  if (err && typeof err === "object" && "message" in err) {
-    const msg = String((err as { message?: unknown }).message);
-    return (
-      msg.includes("RenderingCancelledException") || msg.includes("cancelled")
+      errObj.name === "RenderingCancelledException" ||
+      errObj.name === "PromiseCancelledException" ||
+      String(errObj.message).includes("RenderingCancelledException") ||
+      String(errObj.message).includes("PromiseCancelledException")
     );
   }
   return false;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function normalizeUnknownError(
+  error: unknown,
+  fallback: string,
+): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error === null || error === undefined) return fallback;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return fallback;
+  }
 }
 
 export function PdfViewer() {
@@ -28,11 +40,31 @@ export function PdfViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1.5);
   const [pageNumber, setPageNumber] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [loadedPdf, setLoadedPdf] = useState<{
+    sourceBytes: Uint8Array;
+    document: pdfjsLib.PDFDocumentProxy;
+  } | null>(null);
 
+  // Synchronous pre-paint derivation to make old PDF instantly invisible when new compile result is received
+  const visiblePdfDoc =
+    loadedPdf &&
+    compileResult?.pdfBytes &&
+    loadedPdf.sourceBytes === compileResult.pdfBytes
+      ? loadedPdf.document
+      : null;
+  const visibleTotalPages = visiblePdfDoc ? visiblePdfDoc.numPages : 0;
+  const visiblePageNumber = visiblePdfDoc
+    ? Math.min(pageNumber, visibleTotalPages || 1)
+    : 1;
+
+  // Refs for tracking active tasks and serializing destruction
+  const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
+  const activeDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
+  const renderPromiseRef = useRef<Promise<void> | null>(null);
   const destroyPromiseRef = useRef<Promise<void>>(Promise.resolve());
+
   const loadGenerationRef = useRef(0);
   const isMountedRef = useRef(true);
 
@@ -46,27 +78,16 @@ export function PdfViewer() {
 
   // Fetch / Load PDF Document when bytes change
   useEffect(() => {
-    // 1. Immediately invalidate visible state synchronously BEFORE waiting for teardown or loading!
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setPdfDoc(null);
-    setTotalPages(0);
-    setPageNumber(1);
-    setRenderError(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
-
-    // 2. Increment active generation token
+    // Increment active generation token
     loadGenerationRef.current += 1;
     const currentGeneration = loadGenerationRef.current;
-
-    let localLoadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 
     const loadDoc = async () => {
       const bytes = compileResult?.pdfBytes;
 
-      // 3. Serialized destruction sequence to avoid race conditions (A -> B -> C)
+      // Wait for previous destruction task sequences to realize serial integrity (A -> B -> C)
       await destroyPromiseRef.current;
 
-      // Check if we are still the active generation and is mounted
       if (
         currentGeneration !== loadGenerationRef.current ||
         !isMountedRef.current
@@ -75,30 +96,33 @@ export function PdfViewer() {
       }
 
       if (!bytes || bytes.length === 0) {
+        setLoadedPdf(null);
         return;
       }
 
       try {
         const loadingTask = pdfjsLib.getDocument({ data: bytes });
-        localLoadingTask = loadingTask;
+        loadingTaskRef.current = loadingTask;
 
         const doc = await loadingTask.promise;
+        activeDocRef.current = doc;
 
-        // Ensure generation integrity and mount before committing state
         if (
           currentGeneration === loadGenerationRef.current &&
           isMountedRef.current
         ) {
-          setPdfDoc(doc);
-          setTotalPages(doc.numPages);
+          setLoadedPdf({ sourceBytes: bytes, document: doc });
           setPageNumber(1);
           setRenderError(null);
         } else {
-          // If we loaded it but we're no longer the current generation, destroy it immediately to avoid leakage
+          // If we loaded it but we are obsolete, destroy immediately
           try {
             await doc.destroy();
           } catch {
             // ignore
+          }
+          if (activeDocRef.current === doc) {
+            activeDocRef.current = null;
           }
         }
       } catch (err: unknown) {
@@ -114,17 +138,7 @@ export function PdfViewer() {
         }
 
         console.error("PDF Load Error", err);
-
-        // Normalize errors safely (strings, null, non-errors, or Error objects)
-        let errMessage = "Unknown loading error";
-        if (err instanceof Error) {
-          errMessage = err.message;
-        } else if (typeof err === "string") {
-          errMessage = err;
-        } else if (err !== null && err !== undefined) {
-          errMessage = String(err);
-        }
-
+        const errMessage = normalizeUnknownError(err, "Unknown loading error");
         setRenderError(errMessage);
       }
     };
@@ -139,24 +153,57 @@ export function PdfViewer() {
     });
 
     return () => {
-      if (localLoadingTask) {
-        const taskToDestroy = localLoadingTask;
-        destroyPromiseRef.current = destroyPromiseRef.current.then(async () => {
+      const currentLoadingTask = loadingTaskRef.current;
+      const currentActiveDoc = activeDocRef.current;
+
+      loadingTaskRef.current = null;
+      activeDocRef.current = null;
+
+      destroyPromiseRef.current = destroyPromiseRef.current.then(async () => {
+        // Cancel outstanding render context of old tasks
+        if (renderTaskRef.current) {
           try {
-            await taskToDestroy.destroy();
+            renderTaskRef.current.cancel();
+          } catch {
+            // ignore
+          }
+          renderTaskRef.current = null;
+        }
+        if (renderPromiseRef.current) {
+          try {
+            await renderPromiseRef.current;
+          } catch {
+            // ignore
+          }
+          renderPromiseRef.current = null;
+        }
+
+        // Safe cleanup of the loading task
+        if (currentLoadingTask) {
+          try {
+            await currentLoadingTask.destroy();
           } catch (err) {
             if (!isPdfCancellationError(err)) {
               console.error("PDF load task destruction error", err);
             }
           }
-        });
-      }
+        }
+
+        // Safe cleanup of the loaded document
+        if (currentActiveDoc) {
+          try {
+            await currentActiveDoc.destroy();
+          } catch (err) {
+            console.error("PDF active document destruction error", err);
+          }
+        }
+      });
     };
   }, [compileResult?.pdfBytes]);
 
-  // Render Page when doc, scale, or page changes
+  // Render Page when visiblePdfDoc, scale, or visiblePageNumber changes
   useEffect(() => {
-    if (!pdfDoc) {
+    if (!visiblePdfDoc) {
       // Clear canvas context when document is invalidated
       const canvas = canvasRef.current;
       if (canvas) {
@@ -168,13 +215,39 @@ export function PdfViewer() {
       return;
     }
 
-    let renderTask: pdfjsLib.RenderTask | null = null;
+    let localRenderTask: pdfjsLib.RenderTask | null = null;
     let cancelled = false;
     const currentLoadGen = loadGenerationRef.current;
 
     const renderPage = async () => {
+      // Cancel previous render task and await its completion to serialize canvas operations
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+        renderTaskRef.current = null;
+      }
+      if (renderPromiseRef.current) {
+        try {
+          await renderPromiseRef.current;
+        } catch {
+          // ignore
+        }
+        renderPromiseRef.current = null;
+      }
+
+      if (
+        cancelled ||
+        currentLoadGen !== loadGenerationRef.current ||
+        !isMountedRef.current
+      ) {
+        return;
+      }
+
       try {
-        const page = await pdfDoc.getPage(pageNumber);
+        const page = await visiblePdfDoc.getPage(visiblePageNumber);
 
         if (
           cancelled ||
@@ -209,12 +282,18 @@ export function PdfViewer() {
           viewport: viewport,
         } as Parameters<typeof page.render>[0];
 
-        if (renderTask) {
-          renderTask.cancel();
-        }
+        localRenderTask = page.render(renderContext);
+        renderTaskRef.current = localRenderTask;
+        renderPromiseRef.current = localRenderTask.promise;
 
-        renderTask = page.render(renderContext);
-        await renderTask.promise;
+        await localRenderTask.promise;
+
+        if (renderTaskRef.current === localRenderTask) {
+          renderTaskRef.current = null;
+        }
+        if (renderPromiseRef.current === localRenderTask.promise) {
+          renderPromiseRef.current = null;
+        }
       } catch (err: unknown) {
         if (
           cancelled ||
@@ -229,17 +308,10 @@ export function PdfViewer() {
         }
 
         console.error("PDF Render Error", err);
-
-        // Normalize errors safely
-        let errMessage = "Unknown rendering error";
-        if (err instanceof Error) {
-          errMessage = err.message;
-        } else if (typeof err === "string") {
-          errMessage = err;
-        } else if (err !== null && err !== undefined) {
-          errMessage = String(err);
-        }
-
+        const errMessage = normalizeUnknownError(
+          err,
+          "Unknown rendering error",
+        );
         setRenderError(errMessage);
       }
     };
@@ -248,11 +320,18 @@ export function PdfViewer() {
 
     return () => {
       cancelled = true;
-      if (renderTask) {
-        renderTask.cancel();
+      if (localRenderTask) {
+        try {
+          localRenderTask.cancel();
+        } catch {
+          // ignore
+        }
+        if (renderTaskRef.current === localRenderTask) {
+          renderTaskRef.current = null;
+        }
       }
     };
-  }, [pdfDoc, scale, pageNumber]);
+  }, [visiblePdfDoc, scale, visiblePageNumber]);
 
   const handleDownload = () => {
     const bytes = compileResult?.pdfBytes;
@@ -305,17 +384,19 @@ export function PdfViewer() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
-            disabled={pageNumber <= 1 || !pdfDoc}
+            disabled={visiblePageNumber <= 1 || !visiblePdfDoc}
             className="text-zinc-400 hover:text-white disabled:opacity-50"
           >
             &larr;
           </button>
           <span className="text-xs font-mono text-zinc-300">
-            Page {pageNumber} of {totalPages || "-"}
+            Page {visiblePageNumber} of {visibleTotalPages || "-"}
           </span>
           <button
-            onClick={() => setPageNumber((p) => Math.min(totalPages, p + 1))}
-            disabled={pageNumber >= totalPages || !pdfDoc}
+            onClick={() =>
+              setPageNumber((p) => Math.min(visibleTotalPages, p + 1))
+            }
+            disabled={visiblePageNumber >= visibleTotalPages || !visiblePdfDoc}
             className="text-zinc-400 hover:text-white disabled:opacity-50"
           >
             &rarr;
@@ -325,7 +406,7 @@ export function PdfViewer() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setScale((s) => s * 0.8)}
-            disabled={!pdfDoc}
+            disabled={!visiblePdfDoc}
             className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded disabled:opacity-50"
           >
             <ZoomOut className="w-4 h-4" />
@@ -335,7 +416,7 @@ export function PdfViewer() {
           </span>
           <button
             onClick={() => setScale((s) => s * 1.2)}
-            disabled={!pdfDoc}
+            disabled={!visiblePdfDoc}
             className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded disabled:opacity-50"
           >
             <ZoomIn className="w-4 h-4" />

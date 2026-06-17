@@ -23,7 +23,7 @@ The following table documents how Monaco Editor invokes the `purify.sanitize` AP
 | `ALLOWED_TAGS` | **Yes** | Driven by a custom static list `basicMarkupHtmlTags` containing standard markup elements (e.g., `'a'`, `'div'`, `'p'`, `'span'`, `'code'`). Form/script/interactive elements are strictly omitted. Can be augmented of overridden dynamically at run time via `config.allowedTags`. |
 | `ALLOWED_ATTR` | **Yes** | Driven by a custom static list `defaultAllowedAttrs` containing harmless attributes (e.g., `'href'`, `'alt'`, `'title'`). Adjusted to lower-case dynamically. Can be overridden via `config.allowedAttributes`. |
 | `ALLOW_UNKNOWN_PROTOCOLS` | **Yes** | Hardcoded to `true` inside `defaultDomPurifyConfig`. Link protocol filtering is deferred to custom hooks. |
-| `SAFE_FOR_XML` | **No** | Not configured or referenced in `domSanitize.js`. |
+| `SAFE_FOR_XML` | **No — not configured** | Defaults to `false` (HTML mode). |
 | `SAFE_FOR_TEMPLATES` | **No** | Not configured or referenced in `domSanitize.js`. |
 | `RETURN_DOM` | **No** | Not configured or referenced in `domSanitize.js`. |
 | `RETURN_DOM_FRAGMENT` | **Yes** | Hardcoded to `true` when DOM fragment output is requested (Line 236):<br>`purify.sanitize(untrusted, { ...resolvedConfig, RETURN_DOM_FRAGMENT: true })` |
@@ -105,9 +105,9 @@ Using our verified ESM audit, we map the 15 DOMPurify advisories into rigorous r
 14. **GHSA-rp9w-3fw7-7cwq (Shadow Root inside `<template>`)**
     - *Classification*: `Non osservato nel percorso corrente`
     - *Technical Justification*: No template tag shadow trees are injected via LaTeX hovers, though absolute safety is unproven without interaction testing.
-15. **GHSA-v2wj-7wpq-c8vv / CVE-2026-0540 (Mismatched raw-text elements in `SAFE_FOR_XML`)**
-    - *Classification*: `Non osservato nel percorso corrente`
-    - *Technical Justification*: Monaco base does not configure custom `SAFE_FOR_XML` sanitization, but full confirmation requires specialized verification.
+15. **GHSA-v2wj-7wpq-c8vv / CVE-2026-0540 (Mismatched raw-text elements in default HTML/XML context)**
+    - *Classification*: `Non osservato nel percorso corrente (richiede test mirati)`
+    - *Technical Justification*: `SAFE_FOR_XML` is disattivato di default in DOMPurify (significa che assume il comportamento di default, cioè HTML mode). L'advisory si riferisce proprio all'analisi di frammenti XML/SVG in contesti HTML dove le regole del parser cambiano. Elementi raw-text (ad esempio `<style>`) cambiano comportamento tra HTML classico e namespace XML, rischiando di aggirare filtri di sicurezza se iniettate strutture maliziose in SVG. Poiché Monaco ammette tag SVG ed elabora commenti Markdown (che supportano SVG se abilitati), questa vulnerabilità non può essere esclusa deterministicamente e impone l'esecuzione di test di sicurezza specifici sul parsing delle animazioni e delle namespaces.
 
 ---
 

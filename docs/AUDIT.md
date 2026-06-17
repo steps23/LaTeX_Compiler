@@ -51,7 +51,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con lo stato
 
 ### 1. Test PdfViewer A → B → C: Verifica Argomenti (Risolto ✔)
 
-- **Descrizione**: Il test è stato aggiornato con asserzioni rigorose che validano esattamente l'argomento dell'ultima chiamata. C'è la certezza formale che la transizione carichi ed esegua esattamente il file C finale e scarti l'intermedio B senza sovrascritture.
+- **Descrizione**: Il test è stato aggiornato con asserzioni rigorose che validano esattamente l'argomento dell'ultima chiamata. La transizione carica ed esegue esattamente il file C finale e scarta l'intermedio B senza sovrascritture. Questa robustezza è consolidata da test d'integrazione asincroni, sebbene la certezza assoluta in produzione richieda un monitoraggio continuo.
 - **Stato**: Completato (Data: 17/06/2026).
 
 ### 2. Visibilità Documento in Fase di Distruzione (Risolto ✔)
@@ -66,7 +66,7 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con lo stato
 
 ### 4. Deferred Irrisolte (Risolto ✔)
 
-- **Descrizione**: Risolta l'omissione di risolbilità su branch di errore o unmount: tutte le istanze di Deferred asincrone create nei mock e nei test reali vengono chiuse in modo pulito e serializzato, escludendo leaks e asynchrony overlap warnings.
+- **Descrizione**: Risolta l'omissione di risolbilità su branch di errore o unmount nei casi problematici riscontrati: le istanze di Deferred asincrone create nei mock e nei test reali vengono chiuse in modo ordinato, riducendo la probabilità di perdite e avvisi di sovrapposizione asincrona in base agli scenari coperti.
 - **Stato**: Completato (Data: 17/06/2026).
 
 ### 5. Copertura Test Carenze PDF (Risolto ✔)
