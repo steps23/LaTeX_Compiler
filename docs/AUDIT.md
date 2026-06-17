@@ -42,7 +42,7 @@ La build dell'applicazione e i test vengono eseguiti con successo nell'ambiente 
 
 È stata eseguita un'analisi dettagliata tramite `npm audit --json`, documentata in `docs/security/NPM_AUDIT_2026-06-17.md`. In sintesi:
 
-1. **esbuild (Versione 0.25.12)**: Esposta all'advisory `GHSA-gv7w-rqvm-qjhr` (CVE-2026-41236) concernente un difetto di convalida d'integrità limitato al modulo runtime Deno. Non raggiungibile nel percorso Node corrente, salvo futura introduzione del modulo Deno. L'aggiornamento a `0.28.1` richiede l'isSemVerMajor upgrade coordinato con Vite.
+1. **esbuild (Versione 0.25.12)**: Esposta all'advisory `GHSA-gv7w-rqvm-qjhr — CVE non assegnato/non disponibile nella fonte autorevole corrente` concernente un difetto di convalida d'integrità limitato al modulo runtime Deno. Non raggiungibile nel percorso Node corrente, salvo futura introduzione del modulo Deno. L'aggiornamento a `0.28.1` richiede l'isSemVerMajor upgrade coordinato con Vite.
 2. **dompurify (Versione 3.2.7)**: Dipendenza transitiva rigida introdotta internamente da `monaco-editor@0.55.1`. Risulta interessata da 15 advisory distinti (tra cui `GHSA-crv5-9vww-q3g8` per bypass in modalità RETURN_DOM_FRAGMENT e `GHSA-v9jr-rg53-9pgp` per Prototype Pollution). Le condizioni tecniche dei bypass riguardano l'impiego di `SAFE_FOR_TEMPLATES` o l'elaborazione inter-realm non riscontrate nella configurazione di TeXForge. Si mantiene la versione stabile integrata evitando override automatici o di forza per non compromettere il bundler di Monaco.
 
 ## Residui del Baseline Classificati e Risolti
@@ -82,4 +82,3 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con lo stato
 - **Probabilità**: Estremamente rara, trattandosi di un wrapper.
 - **Test Mancante**: Hook su `onDidChangeModel` count tracking check.
 - **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri oppure durante Fase 4.
-

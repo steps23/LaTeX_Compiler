@@ -1,0 +1,43 @@
+esbuild@0.25.12 dev
+node_modules/esbuild
+  dev esbuild@"^0.25.0" from the root project
+  esbuild@"^0.25.0" from vite@6.4.3
+  node_modules/vite
+    dev vite@"^6.2.3" from the root project
+    peer vite@"^5.2.0 || ^6 || ^7 || ^8" from @tailwindcss/vite@4.3.1
+    node_modules/@tailwindcss/vite
+      dev @tailwindcss/vite@"^4.1.14" from the root project
+    peer vite@"^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" from @vitejs/plugin-react@5.2.0
+    node_modules/@vitejs/plugin-react
+      dev @vitejs/plugin-react@"^5.0.4" from the root project
+    peerOptional vite@"^6.0.0 || ^7.0.0 || ^8.0.0" from @vitest/mocker@4.1.8
+    node_modules/@vitest/mocker
+      @vitest/mocker@"4.1.8" from vitest@4.1.8
+      node_modules/vitest
+        dev vitest@"^4.1.8" from the root project
+    vite@"^6.0.0 || ^7.0.0 || ^8.0.0" from vitest@4.1.8
+    node_modules/vitest
+      dev vitest@"^4.1.8" from the root project
+
+esbuild@0.28.1 dev
+node_modules/tsx/node_modules/esbuild
+  esbuild@"~0.28.0" from tsx@4.22.4
+  node_modules/tsx
+    dev tsx@"^4.21.0" from the root project
+    peerOptional tsx@"^4.8.1" from vite@6.4.3
+    node_modules/vite
+      dev vite@"^6.2.3" from the root project
+      peer vite@"^5.2.0 || ^6 || ^7 || ^8" from @tailwindcss/vite@4.3.1
+      node_modules/@tailwindcss/vite
+        dev @tailwindcss/vite@"^4.1.14" from the root project
+      peer vite@"^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" from @vitejs/plugin-react@5.2.0
+      node_modules/@vitejs/plugin-react
+        dev @vitejs/plugin-react@"^5.0.4" from the root project
+      peerOptional vite@"^6.0.0 || ^7.0.0 || ^8.0.0" from @vitest/mocker@4.1.8
+      node_modules/@vitest/mocker
+        @vitest/mocker@"4.1.8" from vitest@4.1.8
+        node_modules/vitest
+          dev vitest@"^4.1.8" from the root project
+      vite@"^6.0.0 || ^7.0.0 || ^8.0.0" from vitest@4.1.8
+      node_modules/vitest
+        dev vitest@"^4.1.8" from the root project

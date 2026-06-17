@@ -8,6 +8,7 @@ interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: unknown) => void;
+  settled: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,13 +17,22 @@ let activeDeferreds: Array<Deferred<any>> = [];
 function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
+  const deferred: Partial<Deferred<T>> = { settled: false };
   const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
+    resolve = (val) => {
+      deferred.settled = true;
+      res(val);
+    };
+    reject = (reason) => {
+      deferred.settled = true;
+      rej(reason);
+    };
   });
-  const deferred = { promise, resolve, reject };
-  activeDeferreds.push(deferred);
-  return deferred;
+  deferred.promise = promise;
+  deferred.resolve = resolve;
+  deferred.reject = reject;
+  activeDeferreds.push(deferred as Deferred<T>);
+  return deferred as Deferred<T>;
 }
 
 describe("PdfViewer", () => {
@@ -39,18 +49,20 @@ describe("PdfViewer", () => {
       ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    HTMLCanvasElement.prototype.getContext = originalGetContext;
-    for (const d of activeDeferreds) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        d.resolve(null as any);
-      } catch {
-        // ignore
-      }
-    }
+  afterEach(async () => {
+    const promises = activeDeferreds.map((d) => d.promise.catch(() => {}));
+    await Promise.allSettled(promises);
+
+    const unsettled = activeDeferreds.filter((d) => !d.settled);
     activeDeferreds = [];
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+    vi.restoreAllMocks();
+
+    if (unsettled.length > 0) {
+      throw new Error(
+        `Test failed: ${unsettled.length} Deferred objects remained unsettled.`,
+      );
+    }
   });
 
   function createMockTask() {
@@ -74,7 +86,6 @@ describe("PdfViewer", () => {
         taskDeferred.resolve({
           numPages: pages,
           getPage: getPageSpy,
-          destroy: destroySpy,
         } as unknown as pdfjsLib.PDFDocumentProxy);
       },
     };
@@ -432,8 +443,8 @@ describe("PdfViewer", () => {
     const taskC = createMockTask();
 
     const getDocCalls: Array<{ data: Uint8Array }> = [];
-    vi.mocked(pdfjsLib.getDocument).mockImplementation((params) => {
-      getDocCalls.push(params);
+    vi.mocked(pdfjsLib.getDocument).mockImplementation((params: unknown) => {
+      getDocCalls.push(params as { data: Uint8Array });
       if (getDocCalls.length === 1) return taskA.task;
       if (getDocCalls.length === 2) return taskB.task;
       return taskC.task;
@@ -503,8 +514,8 @@ describe("PdfViewer", () => {
     const taskC = createMockTask();
 
     const getDocCalls: Array<{ data: Uint8Array }> = [];
-    vi.mocked(pdfjsLib.getDocument).mockImplementation((params) => {
-      getDocCalls.push(params);
+    vi.mocked(pdfjsLib.getDocument).mockImplementation((params: unknown) => {
+      getDocCalls.push(params as { data: Uint8Array });
       if (getDocCalls.length === 1) return taskA.task;
       if (getDocCalls.length === 2) return taskB.task;
       return taskC.task;
@@ -585,7 +596,6 @@ describe("PdfViewer", () => {
     // 4. Resolve B slow document load after C is already fully complete & shown
     const mockObsoleteDoc = {
       numPages: 77,
-      destroy: vi.fn().mockResolvedValue(undefined),
     };
     act(() => {
       taskB.taskDeferred.resolve(
@@ -600,10 +610,22 @@ describe("PdfViewer", () => {
     expect(screen.getByText(/Page 1 of 10/i)).toBeTruthy();
     expect(screen.queryByText(/Page 1 of 77/i)).toBeNull();
 
-    // 6. Verify obsolete B document was safely destroyed
-    expect(mockObsoleteDoc.destroy).toHaveBeenCalledTimes(1);
+    // 6. Verify obsolete B task was requested to destroy
+    // It was destroyed once when B->C happened, and then again when B resolves?
+    // Actually, in PdfViewer.tsx, on B->C change, the cleanup function runs and calls currentResource?.loadingTask.destroy().
+    // Wait, B was not activeResourceRef yet because it hadn't resolved!
+    // NO. activeResourceRef is set *after* `await loadingTask.promise`.
+    // So on B->C change, activeResourceRef is STILL A !
+    expect(taskB.destroySpy).toHaveBeenCalledTimes(1);
 
+    // 7. Unmount and verify exact destruction counts
     unmount();
+
+    taskC.destroyDeferred.resolve();
+
+    await waitFor(() => expect(taskC.destroySpy).toHaveBeenCalledTimes(1));
+    expect(taskB.destroySpy).toHaveBeenCalledTimes(1);
+    expect(taskA.destroySpy).toHaveBeenCalledTimes(1);
   });
 
   it("immediately invalidates visible state when bytes change, before teardown or loader resolves", async () => {

@@ -31,8 +31,8 @@ Gli ex-residui PDF sono stati indirizzati tramite estensioni mirate della suite 
 - [x] **Deferred Irrisolte (Risolto ✔)**: Chiusura serializzata e pulita di tutte le promesse asincrone deferred nei test suites.
 
 Residui non bloccanti rinviati a fasi successive:
-- [ ] **Controllo Callback Monaco Editor (Sospeso / Rinviato)**: Validazione fine di `onDidChangeModel` in Monaco (fasi SyncTeX/LSP).
 
+- [ ] **Controllo Callback Monaco Editor (Sospeso / Rinviato)**: Validazione fine di `onDidChangeModel` in Monaco (fasi SyncTeX/LSP).
 
 ---
 

@@ -59,8 +59,12 @@ export function PdfViewer() {
     : 1;
 
   // Refs for tracking active tasks and serializing destruction
-  const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
-  const activeDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const activeResourceRef = useRef<{
+    generation: number;
+    sourceBytes: Uint8Array;
+    loadingTask: pdfjsLib.PDFDocumentLoadingTask;
+    document: pdfjsLib.PDFDocumentProxy | null;
+  } | null>(null);
   const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
   const renderPromiseRef = useRef<Promise<void> | null>(null);
   const destroyPromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -101,30 +105,31 @@ export function PdfViewer() {
       }
 
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: bytes });
-        loadingTaskRef.current = loadingTask;
+        const workerBytes = bytes.slice();
+        const loadingTask = pdfjsLib.getDocument({ data: workerBytes });
+
+        const resource = {
+          generation: currentGeneration,
+          sourceBytes: bytes,
+          loadingTask,
+          document: null as pdfjsLib.PDFDocumentProxy | null,
+        };
+
+        activeResourceRef.current = resource;
 
         const doc = await loadingTask.promise;
-        activeDocRef.current = doc;
 
         if (
-          currentGeneration === loadGenerationRef.current &&
-          isMountedRef.current
+          currentGeneration !== loadGenerationRef.current ||
+          !isMountedRef.current
         ) {
-          setLoadedPdf({ sourceBytes: bytes, document: doc });
-          setPageNumber(1);
-          setRenderError(null);
-        } else {
-          // If we loaded it but we are obsolete, destroy immediately
-          try {
-            await doc.destroy();
-          } catch {
-            // ignore
-          }
-          if (activeDocRef.current === doc) {
-            activeDocRef.current = null;
-          }
+          return;
         }
+
+        resource.document = doc;
+        setLoadedPdf({ sourceBytes: bytes, document: doc });
+        setPageNumber(1);
+        setRenderError(null);
       } catch (err: unknown) {
         if (
           currentGeneration !== loadGenerationRef.current ||
@@ -153,11 +158,8 @@ export function PdfViewer() {
     });
 
     return () => {
-      const currentLoadingTask = loadingTaskRef.current;
-      const currentActiveDoc = activeDocRef.current;
-
-      loadingTaskRef.current = null;
-      activeDocRef.current = null;
+      const currentResource = activeResourceRef.current;
+      activeResourceRef.current = null;
 
       destroyPromiseRef.current = destroyPromiseRef.current.then(async () => {
         // Cancel outstanding render context of old tasks
@@ -179,22 +181,13 @@ export function PdfViewer() {
         }
 
         // Safe cleanup of the loading task
-        if (currentLoadingTask) {
+        if (currentResource?.loadingTask) {
           try {
-            await currentLoadingTask.destroy();
+            await currentResource.loadingTask.destroy();
           } catch (err) {
             if (!isPdfCancellationError(err)) {
               console.error("PDF load task destruction error", err);
             }
-          }
-        }
-
-        // Safe cleanup of the loaded document
-        if (currentActiveDoc) {
-          try {
-            await currentActiveDoc.destroy();
-          } catch (err) {
-            console.error("PDF active document destruction error", err);
           }
         }
       });
