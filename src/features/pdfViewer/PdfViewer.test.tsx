@@ -366,6 +366,21 @@ describe("PdfViewer", () => {
     unmount();
   });
 
+  function mockPdfPageAndRender(
+    mockTask: ReturnType<typeof createMockTask>,
+    renderPromise: Promise<void> = Promise.resolve(),
+  ) {
+    mockTask.getPageSpy.mockImplementation(() => {
+      return Promise.resolve({
+        getViewport: vi.fn().mockReturnValue({ width: 100, height: 100 }),
+        render: vi.fn().mockReturnValue({
+          promise: renderPromise,
+          cancel: mockTask.renderCancelSpy,
+        }),
+      });
+    });
+  }
+
   it("shows visible error when document load fails unexpectedly", async () => {
     const mock = createMockTask();
     mockPdfjsGetDocument(mock.task);
@@ -393,5 +408,283 @@ describe("PdfViewer", () => {
     });
 
     unmount();
+  });
+
+  it("A -> B -> C: final loading receives exactly C, and B (completing later) does not overwrite C", async () => {
+    const taskA = createMockTask();
+    const taskB = createMockTask();
+    const taskC = createMockTask();
+
+    const getDocCalls: Array<{ data: Uint8Array }> = [];
+    vi.mocked(pdfjsLib.getDocument).mockImplementation((params) => {
+      getDocCalls.push(params);
+      if (getDocCalls.length === 1) return taskA.task;
+      if (getDocCalls.length === 2) return taskB.task;
+      return taskC.task;
+    });
+
+    useEditorStore.setState({
+      compileResult: {
+        success: true,
+        pdfBytes: new Uint8Array([100]), // A
+        rawLog: "",
+        errors: [],
+        warnings: [],
+        durationMs: 0,
+      },
+    });
+
+    const { unmount } = render(<PdfViewer />);
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
+    expect(getDocCalls[0]).toEqual({ data: new Uint8Array([100]) });
+
+    // Transition A -> B -> C. A's destroy is pending
+    act(() => {
+      useEditorStore.setState({
+        compileResult: {
+          success: true,
+          pdfBytes: new Uint8Array([101]), // B
+          rawLog: "",
+          errors: [],
+          warnings: [],
+          durationMs: 0,
+        },
+      });
+    });
+
+    // Make sure destroy was called on A
+    await waitFor(() => expect(taskA.destroySpy).toHaveBeenCalledTimes(1));
+
+    // Instantly queue C
+    act(() => {
+      useEditorStore.setState({
+        compileResult: {
+          success: true,
+          pdfBytes: new Uint8Array([102]), // C
+          rawLog: "",
+          errors: [],
+          warnings: [],
+          durationMs: 0,
+        },
+      });
+    });
+
+    // Now resolve A's destroy so the queue can proceed
+    taskA.destroyDeferred.resolve();
+
+    // The second getDocument should be called for C (since B was bypassed)
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
+
+    // C's bytes are exactly the ones used
+    expect(getDocCalls[1]).toEqual({ data: new Uint8Array([102]) });
+
+    // Ensure we resolve everything cleanly inside the test
+    taskB.taskDeferred.resolve({} as unknown as pdfjsLib.PDFDocumentProxy);
+    taskC.taskDeferred.resolve({} as unknown as pdfjsLib.PDFDocumentProxy);
+    taskB.destroyDeferred.resolve();
+    taskC.destroyDeferred.resolve();
+
+    unmount();
+  });
+
+  it("immediately invalidates visible state when bytes change, before teardown or loader resolves", async () => {
+    const taskA = createMockTask();
+    const taskB = createMockTask();
+
+    let getDocCallsCount = 0;
+    vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
+      getDocCallsCount++;
+      return getDocCallsCount === 1 ? taskA.task : taskB.task;
+    });
+
+    useEditorStore.setState({
+      compileResult: {
+        success: true,
+        pdfBytes: new Uint8Array([1]),
+        rawLog: "",
+        errors: [],
+        warnings: [],
+        durationMs: 0,
+      },
+    });
+
+    const { unmount } = render(<PdfViewer />);
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
+
+    // Resolve A
+    mockPdfPageAndRender(taskA);
+    act(() => taskA.resolveDoc(5));
+
+    // Validate we can interact/see pages
+    await waitFor(() => expect(screen.getByText(/Page 1 of 5/i)).toBeTruthy());
+
+    // Switch to B - which is slow because taskA.destroy is pending
+    act(() => {
+      useEditorStore.setState({
+        compileResult: {
+          success: true,
+          pdfBytes: new Uint8Array([2]),
+          rawLog: "",
+          errors: [],
+          warnings: [],
+          durationMs: 0,
+        },
+      });
+    });
+
+    // Immediately (synchronously), getPage, scale, page controls must be disabled/hidden because pdfDoc is null,
+    // even though taskA is still in teardown (destroy is not resolved yet)
+    expect(screen.queryByText(/Page 1 of 5/i)).toBeNull();
+
+    // Back & forward buttons should show disabled state synchronously
+    const backBtn = screen.getByRole("button", { name: "←" });
+    expect((backBtn as HTMLButtonElement).disabled).toBe(true);
+
+    // Resolve destroy & B to clean up
+    taskA.destroyDeferred.resolve();
+    taskB.taskDeferred.resolve({} as unknown as pdfjsLib.PDFDocumentProxy);
+    taskB.destroyDeferred.resolve();
+
+    unmount();
+  });
+
+  it("handles synchronous getDocument failures and normalizes them safely", async () => {
+    vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
+      throw new Error("Synch load error");
+    });
+
+    useEditorStore.setState({
+      compileResult: {
+        success: true,
+        pdfBytes: new Uint8Array([99]),
+        rawLog: "",
+        errors: [],
+        warnings: [],
+        durationMs: 0,
+      },
+    });
+
+    const { unmount } = render(<PdfViewer />);
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error rendering PDF: Synch load error/i),
+      ).toBeTruthy();
+    });
+    unmount();
+  });
+
+  it("normalizes rejection with custom types (string, null, non-Error objects)", async () => {
+    const mock1 = createMockTask();
+    const mock2 = createMockTask();
+    const mock3 = createMockTask();
+
+    let callCount = 0;
+    vi.mocked(pdfjsLib.getDocument).mockImplementation(() => {
+      callCount++;
+      return callCount === 1
+        ? mock1.task
+        : callCount === 2
+          ? mock2.task
+          : mock3.task;
+    });
+
+    // 1. Rejection with string
+    useEditorStore.setState({
+      compileResult: {
+        success: true,
+        pdfBytes: new Uint8Array([50]),
+        rawLog: "",
+        errors: [],
+        warnings: [],
+        durationMs: 0,
+      },
+    });
+    const { unmount } = render(<PdfViewer />);
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
+    act(() => mock1.taskDeferred.reject("Fail with custom string"));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error rendering PDF: Fail with custom string/i),
+      ).toBeTruthy();
+    });
+
+    // 2. Rejection with null
+    act(() => {
+      useEditorStore.setState({
+        compileResult: {
+          success: true,
+          pdfBytes: new Uint8Array([51]),
+          rawLog: "",
+          errors: [],
+          warnings: [],
+          durationMs: 0,
+        },
+      });
+    });
+    mock1.destroyDeferred.resolve();
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(2));
+    act(() => mock2.taskDeferred.reject(null));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error rendering PDF: Unknown loading error/i),
+      ).toBeTruthy();
+    });
+
+    // 3. Rejection with non-Error object
+    act(() => {
+      useEditorStore.setState({
+        compileResult: {
+          success: true,
+          pdfBytes: new Uint8Array([52]),
+          rawLog: "",
+          errors: [],
+          warnings: [],
+          durationMs: 0,
+        },
+      });
+    });
+    mock2.destroyDeferred.resolve();
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(3));
+    act(() => mock3.taskDeferred.reject({ reason: "custom_reason_obj" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error rendering PDF: \[object Object\]/i),
+      ).toBeTruthy();
+    });
+
+    // Resolve deferreds
+    mock3.destroyDeferred.resolve();
+    unmount();
+  });
+
+  it("handles failure of loadingTask.destroy synchronously/asynchronously and log it without crashing", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const mock = createMockTask();
+    mockPdfjsGetDocument(mock.task);
+
+    useEditorStore.setState({
+      compileResult: {
+        success: true,
+        pdfBytes: new Uint8Array([1]),
+        rawLog: "",
+        errors: [],
+        warnings: [],
+        durationMs: 0,
+      },
+    });
+
+    const { unmount } = render(<PdfViewer />);
+    await waitFor(() => expect(pdfjsLib.getDocument).toHaveBeenCalledTimes(1));
+
+    mock.destroySpy.mockRejectedValueOnce(new Error("Destroy failed"));
+
+    unmount();
+    await new Promise((r) => setTimeout(r, 10)); // let promises settle
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "PDF load task destruction error",
+      expect.any(Error),
+    );
   });
 });

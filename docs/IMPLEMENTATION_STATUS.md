@@ -22,14 +22,17 @@
 
 ### Residui Tecnici Attivi (da `docs/AUDIT.md`)
 
-Sebbene la baseline tecnica sia consolidata sia per TypeScript che per il runtime, sono presenti 6 residui attivi qualificati pre-migrazione con la seguente catalogazione e blocco:
+Pre-migrazione sono stati completati con successo tutti i 5 residui PDF bloccanti:
 
-1. **Visibilità Documento in Fase di Distruzione (Gravità Media)** - _Bloccante prima di Tauri_: Il vecchio `pdfDoc` rimane temporaneamente visibile durante gli smantellamenti asincroni, rischiando azioni impreviste dell'utente. Deve essere risolto prioritariamente prima di collegare il backend Tauri nativo.
-2. **Copertura Test Carenze PDF (Gravità Media)** - _Bloccante prima di Tauri_: Mancano asserzioni per fallimenti critici sincroni di `getDocument` e riavvii forzati. Cruciale per assicurare la tolleranza ai guasti nell'interfaccia desktop.
-3. **Test PdfViewer A → B → C: Verifica Argomenti (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Il test verifica solo il conteggio delle chiamate a `getDocument` senza asseverare l'argomento esatto dei byte per il file C.
-4. **Catch del Rendering: Rigetti non-Error (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Gestione di rigetti asincroni non tipizzati in errore primario.
-5. **Deferred Irrisolte (Gravità Bassa)** - _Rinviabile alla fase PDF / Sviluppo Viewer_: Gestione fine del teardown delle promesse in Vitest.
-6. **Controllo Callback Monaco Editor (Gravità Bassa)** - _Rinviabile alle fasi SyncTeX / LSP_: Validazione dettagliata di esecuzione di `onDidChangeModel` in Monaco.
+- [x] **Visibilità Documento in Fase di Distruzione (Risolto ✔)**: Azzeramento sincrono istantaneo del vecchio `pdfDoc` prima dello smaltimento asincrono del task.
+- [x] **Copertura Test Carenze PDF (Risolto ✔)**: Aggiunta copertura per fallimenti `getDocument`, rimozioni precoci di eventi e lifecycle post-unmount.
+- [x] **Test PdfViewer A → B → C: Verifica Argomenti (Risolto ✔)**: Verifica rigorosa con asserzioni sui byte caricati nell'ultima chiamata `getDocument` di C.
+- [x] **Catch del Rendering: Rigetti non-Error (Risolto ✔)**: Normalizzazione robusta degli input di rigetto non standard (stringhe, null, oggetti).
+- [x] **Deferred Irrisolte (Risolto ✔)**: Chiusura serializzata e pulita di tutte le promesse asincrone deferred nei test suites.
+
+Residui non bloccanti rinviati a fasi successive:
+- [ ] **Controllo Callback Monaco Editor (Sospeso / Rinviato)**: Validazione fine di `onDidChangeModel` in Monaco (fasi SyncTeX/LSP).
+
 
 ---
 

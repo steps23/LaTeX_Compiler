@@ -45,54 +45,34 @@ La build dell'applicazione e i test vengono eseguiti con successo nell'ambiente 
 1. **esbuild (Versione 0.25.12)**: Esposta all'advisory `GHSA-gv7w-rqvm-qjhr` (CVE-2026-41236) concernente un difetto di convalida d'integrità limitato al modulo runtime Deno. Non raggiungibile nel percorso Node corrente, salvo futura introduzione del modulo Deno. L'aggiornamento a `0.28.1` richiede l'isSemVerMajor upgrade coordinato con Vite.
 2. **dompurify (Versione 3.2.7)**: Dipendenza transitiva rigida introdotta internamente da `monaco-editor@0.55.1`. Risulta interessata da 15 advisory distinti (tra cui `GHSA-crv5-9vww-q3g8` per bypass in modalità RETURN_DOM_FRAGMENT e `GHSA-v9jr-rg53-9pgp` per Prototype Pollution). Le condizioni tecniche dei bypass riguardano l'impiego di `SAFE_FOR_TEMPLATES` o l'elaborazione inter-realm non riscontrate nella configurazione di TeXForge. Si mantiene la versione stabile integrata evitando override automatici o di forza per non compromettere il bundler di Monaco.
 
-## Residui del Baseline Classificati
+## Residui del Baseline Classificati e Risolti
 
-Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispettive valutazioni e fasi consigliate per la risoluzione.
+Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con lo stato di risoluzione aggiornato al 17/06/2026.
 
-### 1. Test PdfViewer A → B → C: Verifica Argomenti
+### 1. Test PdfViewer A → B → C: Verifica Argomenti (Risolto ✔)
 
-- **Descrizione**: Il test verifica solo il numero complessivo delle chiamate a `getDocument` (che siano 2) senza asserire che la seconda riceva realmente i byte del file C.
-- **Gravità**: Bassa.
-- **Impatto**: Refactoring e modifiche al codice testuale.
-- **Probabilità**: Molto probabile che il componente stia gestendo i byte giusti, ma il test ha una lacuna.
-- **Test Mancante**: Aggiunta di expectation sull'argomento dell'ultima chiamata.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri oppure durante Fase 4.
+- **Descrizione**: Il test è stato aggiornato con asserzioni rigorose che validano esattamente l'argomento dell'ultima chiamata. C'è la certezza formale che la transizione carichi ed esegua esattamente il file C finale e scarti l'intermedio B senza sovrascritture.
+- **Stato**: Completato (Data: 17/06/2026).
 
-### 2. Visibilità Documento in Fase di Distruzione
+### 2. Visibilità Documento in Fase di Distruzione (Risolto ✔)
 
-- **Descrizione**: Il vecchio `pdfDoc` rimane attivo nell'interfaccia mentre il nuovo task attende la distruzione asincrona del task precedente, aprendo al rischio che un utente interagisca o riavvii un rendering su un documento obsoleto avviato verso il dismount.
-- **Gravità**: Media.
-- **Impatto**: Possibili errori a runtime causati da tentativi di render su page worker distrutti.
-- **Probabilità**: Bassa in cicli di compilazione normali, media per utenti veloci.
-- **Test Mancante**: Simulazione di interazione utente (zoom/scroll) durante la pendenza della Promise di distruzione.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
+- **Descrizione**: Il lifecycle è stato allineato in modo da azzerare e invalidare immediatamente lo stato sincrono del visore `pdfDoc` quando cambiano i byte, PRIMA del completamento del teardown asincrono del task precedente. Questo impedisce qualsiasi interazione utente asincrona malevola durante gli smantellamenti dei task.
+- **Stato**: Completato (Data: 17/06/2026).
 
-### 3. Catch del Rendering: Rigetti non-Error
+### 3. Catch del Rendering: Rigetti non-Error (Risolto ✔)
 
-- **Descrizione**: Se `renderDeferred.reject()` dovesse intercettare e scatenare un errore non associato all'istanza `Error`, il catch fallirebbe la sua traduzione.
-- **Gravità**: Bassa.
-- **Impatto**: Il messaggio d'errore fallirebbe il display nella UI e l'eccezione potrebbe diffondersi.
-- **Probabilità**: Rara, il layer libreria è tipicamente affidabile nel rilanciare strutture stringa o oggetti Error validi.
-- **Test Mancante**: Reject con string type, `null`, object generico.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
+- **Descrizione**: Introdotta normalizzazione e formattazione robusta per i rigetti non-tipizzati (stringhe, null, oggetti generici) nel layer di cattura degli errori del visore.
+- **Stato**: Completato (Data: 17/06/2026).
 
-### 4. Deferred Irrisolte
+### 4. Deferred Irrisolte (Risolto ✔)
 
-- **Descrizione**: Alcune Deferred esplicite rimangono irrisolte al termine dell'unmount del componente all'interno dei test asincroni, creando un teardown impuro.
-- **Gravità**: Bassa.
-- **Impatto**: Test legati alla validazione memory leak rischiano warning asincroni o overhead del runner Vitest.
-- **Probabilità**: Frequente nei branch asincroni dei test correnti.
-- **Test Mancante**: Validazioni di garbage collection fine cycle in test runner context.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
+- **Descrizione**: Risolta l'omissione di risolbilità su branch di errore o unmount: tutte le istanze di Deferred asincrone create nei mock e nei test reali vengono chiuse in modo pulito e serializzato, escludendo leaks e asynchrony overlap warnings.
+- **Stato**: Completato (Data: 17/06/2026).
 
-### 5. Copertura Test Carenze PDF
+### 5. Copertura Test Carenze PDF (Risolto ✔)
 
-- **Descrizione**: Errori sincroni in getDocument, fallimento hard di `loadingTask.destroy()`, gestione `PromiseCancelledException` in fetch phase e controlli che i `setState` non operino dopo unmount restano inesplorati.
-- **Gravità**: Media.
-- **Impatto**: Maggiore rischio di false confidence della code quality basata solo sulla coverage formale di render success rate.
-- **Probabilità**: Possibile a fronte di worker falliti da limiti memoria Chrome o network issue locale.
-- **Test Mancante**: Simulazione unmount e assertion sui mock di console warn per detectare rendering actions.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
+- **Descrizione**: Estesa la suite di test includendo asserzioni su errori sincroni in `getDocument`, catture controllate del fallimento asincrono di `loadingTask.destroy()` ed eventi asincroni generati dopo l'unmount del viewer.
+- **Stato**: Completato (Data: 17/06/2026).
 
 ### 6. Controllo Callback Monaco Editor
 
@@ -101,4 +81,5 @@ Di seguito l'audit dei residui attuali dell'applicazione pre-Tauri, con le rispe
 - **Impatto**: Nessuno pratico sull'output ma disaccoppiamento dalle promesse comportamentali del lifecycle di React nel proxy Editor.
 - **Probabilità**: Estremamente rara, trattandosi di un wrapper.
 - **Test Mancante**: Hook su `onDidChangeModel` count tracking check.
-- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri.
+- **Fase Consigliata**: Fase di Stabilizzazione Pre-Tauri oppure durante Fase 4.
+
