@@ -9,11 +9,14 @@ Questo documento fornisce l'evidenza riproducibile, verificata e dettagliata dei
 I controlli sono stati eseguiti nel container isolato di AI Studio con le seguenti specifiche precise:
 
 - **Commit di Partenza**: `5afcd2b37354cf8fb54071aabebaedb2e584997a`
-- **Commit Finale**: `ae6732a8e6d2bb76435eaf44e94e7629daa43d63`
+- **Baseline tecnica verificata**: `6ced5a1ef6852bfdd9840149b7916a1bbd313726`
 - **Versione Node.js**: `v22.x`
+- **Runner**: Ubuntu 24.04
 - **Versione NPM**: `10`
 - **Versione Vitest**: `v4.1.8`
-- **Run pubblico verificato**: Run ID 27681099784 (Verificato e Verde).
+- **GitHub Actions Run**: 27682061084 (Verificato e Verde).
+
+_Nota: lo SHA della baseline tecnica identifica l'ultimo commit verificato dalla CI e non necessariamente il commit corrente successivo all'aggiornamento documentale._
 
 ---
 
@@ -74,7 +77,7 @@ Tutte le situazioni d'errore del PDF, incluse:
 - Corretta valutazione d'ambiente e Deferred completate rigorosamente,
 - Prevenzione di rendering simultanei su canvas,
 
-sono state incorporate nella suite d'automazione dei test con copertura totale e zero failures.
+sono state incorporate nella suite d'automazione dei test con copertura automatizzata degli scenari elencati e zero failures.
 
 ---
 
@@ -86,7 +89,13 @@ sono state incorporate nella suite d'automazione dei test con copertura totale e
 
 ## 5. Analisi di Sicurezza e Raggiungibilità (`npm audit`)
 
-- **Stato**: Analizzato e documentato (Exit Code 1, vulnerabilità moderate rilevate nel pacchetto `dompurify` non auto-risolvibili a causa del vincolo rigido di Monaco Editor).
+- **Stato**: Analizzato e documentato (Exit Code 1). Sicurezza verificata, aggiornamenti manuali rinviati.
+- **Riepilogo Nominal Severity dell'audit**:
+  - `1 low`
+  - `1 moderate`
+  - `2 high`
+  - `0 critical`
+  - `4 totali`
 - **File di Output JSON Reale**: L'esito verbatim dell'audit è registrato in `docs/evidence/npm-audit-2026-06-17.json`.
 - **Relazioni Empiriche**:
   ```text
@@ -99,5 +108,7 @@ sono state incorporate nella suite d'automazione dei test con copertura totale e
   ├── tsx@4.x
   └── vite@6.0.0
   ```
-- **Risk Assessment**:
-  - Un'analisi approfondita sulle origini e sull'uso di DOMPurify dentro le sorgenti Monaco è disponibile in `docs/security/MONACO_DOMPURIFY_REACHABILITY.md`, aggiornato con le direttive che confermano che SAFE_FOR_XML è attivo di default, rendendo potenziale il rischio indicato da `GHSA-v2wj-7wpq-c8vv` se attivato tramite SVG malevoli.
+- **Risk Assessment ed Esposizione (Raggiungibilità Effettiva)**:
+  - **DOMPurify (moderate/low)**: Vulnerabilità rilevate nel pacchetto `dompurify` non auto-risolvibili a causa del vincolo rigido di Monaco Editor. Un'analisi approfondita sulle origini e sull'uso di DOMPurify dentro le sorgenti Monaco è disponibile in `docs/security/MONACO_DOMPURIFY_REACHABILITY.md`, aggiornato con le direttive che confermano che SAFE_FOR_XML è attivo di default, rendendo potenziale il rischio indicato da `GHSA-v2wj-7wpq-c8vv` solo se attivato tramite SVG malevoli.
+  - **esbuild / vite (high)**: Le vulnerabilità "high" riguardano `esbuild` e di conseguenza `vite` (che dipende da `esbuild`). L'advisory `esbuild` (GHSA-gv7w-rqvm-qjhr) è classificato **non applicabile al percorso corrente**, poiché riguarda l'assenza di verifica di integrità dei binari specificatamente nel modulo Deno. Il progetto TeXForge utilizza il runtime Node.js per build system e toolchain (Vite).
+- **Decisione**: Non si utilizzerà `npm audit fix --force` per non introdurre regressioni in Monaco Editor o Vite. Si effettuerà un aggiornamento coordinato a versioni superiori quando supportate ufficialmente.

@@ -18,7 +18,7 @@
 - [x] Rimossi global suppressions per ResizeObserver.
 - [x] Corretti difetti di lifecycle in `PdfViewer`, `BlobViewer` URL Objects leak, restore corretto view state in `MonacoEditor`, strict mode typechecks integrati e rimosse dependency instabili (come name.match non boolean).
 - [x] PDF.js localizzato via Vite build senza CDN esterne.
-- [x] Il workflow GitHub Actions è configurato. I gate locali risultano superati e il run pubblico 27681099784 associato al commit ae6732a8e6d2bb76435eaf44e94e7629daa43d63 è stato verificato ed è verde.
+- [x] Il workflow GitHub Actions è configurato. I gate locali risultano superati e il run pubblico 27682061084 associato al commit 6ced5a1ef6852bfdd9840149b7916a1bbd313726 è stato verificato ed è verde.
 
 ### Residui Tecnici Attivi (da `docs/AUDIT.md`)
 
