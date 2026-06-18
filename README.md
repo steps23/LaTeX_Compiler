@@ -10,7 +10,13 @@ TeXForge is a modern online LaTeX editor built as a React/Vite SPA. It focuses o
 - **Editor:** Integrated Monaco Editor with local worker scripts for performance.
 - **PDF Viewer:** A basic, single-page PDF viewer using a locally imported PDF.js worker.
 - **Collaboration:** Currently a single-player, local-persistence-first experience, with remote compilation currently required. No real-time collaboration features are implemented.
-- **Desktop:** The planned Tauri/Desktop application is not yet implemented.
+- **Desktop:** The application includes a Tauri v2 native foundation for macOS Apple Silicon (`aarch64-apple-darwin`), featuring secure IPC bindings and a dual-runtime structure capable of running both in a browser preview and as a native desktop application.
+
+## Desktop Requirements
+To run or build the desktop version (`npm run tauri:dev` / `npm run tauri:build`):
+1. Install **Rust** via `rustup` (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
+2. Ensure you have the target installed: `rustup target add aarch64-apple-darwin`.
+3. Install **Xcode Command Line Tools**: `xcode-select --install`.
 
 ## Directory Structure
 

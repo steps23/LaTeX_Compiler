@@ -36,9 +36,9 @@ Residui non bloccanti rinviati a fasi successive:
 
 ---
 
-## Desktop / Tauri v2 Roadmap (Da Fare)
+## Desktop / Tauri v2 Roadmap
 
-- [ ] **Fase 1**: Inizializzazione Tauri v2 su macOS Apple Silicon e impostazione del Workspace.
+- [x] **Fase 1**: Inizializzazione Tauri v2 su macOS Apple Silicon e impostazione del Workspace. (Completato con HashRouter e runtime duale).
 - [ ] **Fase 2**: Implementare storage Rust-based `SQLite` e FileSystem, sostituendo IndexedDB per il Local mode.
 - [ ] **Fase 3**: Costruire l'Astrazione in Rust del Compiler per usare nativamente `latexmk` ignorando `HttpFallbackCompiler`.
 - [ ] **Fase 4**: Integrare il supporto a SyncTeX in viewer e `texlab` LSP per Monaco editor.

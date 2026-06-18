@@ -4,6 +4,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   Download,
+  Monitor,
+  Globe,
 } from "lucide-react";
 import { useEditorStore } from "../state/store";
 import { getCompiler } from "../features/compiler";
@@ -11,6 +13,7 @@ import { flushProject } from "../services/FileDebouncer";
 import { Link } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { exportProjectZip } from "../utils/projects";
+import { isTauri } from "../utils/runtime";
 
 export function Header() {
   const {
@@ -26,6 +29,7 @@ export function Header() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isDesktop] = useState(isTauri());
 
   useEffect(() => {
     if (isEditingTitle && inputRef.current) {
@@ -118,6 +122,17 @@ export function Header() {
 
       <div className="flex items-center gap-3">
         <div className="w-[1px] h-6 bg-zinc-800 mx-2" />
+        <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded-sm">
+          {isDesktop ? (
+            <>
+              <Monitor className="w-3.5 h-3.5" /> Desktop
+            </>
+          ) : (
+            <>
+              <Globe className="w-3.5 h-3.5" /> Browser
+            </>
+          )}
+        </div>
         {currentProject?.storageMode === "local" && (
           <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-sm mr-2">
             <CheckCircle2 className="w-3.5 h-3.5" />

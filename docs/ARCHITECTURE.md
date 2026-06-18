@@ -1,14 +1,16 @@
 # Architecture Overview
 
-L'applicazione è un editor online per LaTeX in formato SPA (Single Page Application) sviluppato con React e Vite.
+L'applicazione è un editor LaTeX inizialmente in formato SPA (Single Page Application) sviluppata con React e Vite, e ora architettata come un'app Desktop Tauri v2 dual-runtime.
 
 ## Struttura
 
-- \`src/state\`: Contiene gli store globali gestiti con zustand per gestire i file e la compilazione.
-- \`src/features/compiler\`: Motore astrazione per la conversione di codice sorgente LaTeX in file PDF in formato Uint8Array tramite HTTP fallback.
-- \`src/features/editor\`: Componente editor Monaco configurato per sintassi LaTeX.
-- \`src/features/pdfViewer\`: Gestione dell'anteprima PDF renderizzata via web workers (\`pdfjs-dist\`).
-- \`server.ts\`: Server Express che avvolge l'SPA per il development e gestisce i proxy sicuri (come CORS per la compilazione). Serve la directory compilata in produzione.
+- `src/state`: Contiene gli store globali gestiti con zustand per gestire i file e la compilazione.
+- `src/features/compiler`: Motore astrazione per la conversione di codice sorgente LaTeX in file PDF.
+- `src/features/editor`: Componente editor Monaco configurato per sintassi LaTeX.
+- `src/features/pdfViewer`: Gestione dell'anteprima PDF renderizzata via web workers (`pdfjs-dist`).
+- `src/utils/runtime.ts`: Adapter che individua se l'ambiente di esecuzione è il browser o il worker Webview nativo di Tauri. Usa IPC sicuro per la comunicazione col backend Rust.
+- `src-tauri`: Il backend nativo Rust (`aarch64-apple-darwin`), costruito con Tauri v2. Fornisce capacità restrittive (Least Privilege) per finestre, alert dialogs, system process opening e session state restoration.
+- `server.ts`: Server Express usato unicamente per la visualizzazione/test della modalità Browser web e fallback di sviluppo. La compilazione Tauri desktop non ne fa uso.
 
 ## Database & Local-First Architecture
 
