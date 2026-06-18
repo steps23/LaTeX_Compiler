@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
 export const isTauri = () => {
   return (
     typeof window !== "undefined" && window.__TAURI_INTERNALS__ !== undefined

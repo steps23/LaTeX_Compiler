@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "TeXForge: Frontend gates",
+      "type": "shell",
+      "command": "npm run check:all",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "TeXForge: Rust fmt",
+      "type": "shell",
+      "command": "cargo fmt --check --manifest-path src-tauri/Cargo.toml",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "TeXForge: Rust clippy",
+      "type": "shell",
+      "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "TeXForge: Rust test",
+      "type": "shell",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "TeXForge: Rust check",
+      "type": "shell",
+      "command": "cargo check --manifest-path src-tauri/Cargo.toml",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "TeXForge: Tauri dev",
+      "type": "shell",
+      "command": "npm run tauri:dev",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

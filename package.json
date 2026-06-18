@@ -8,7 +8,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "preview": "vite preview",
     "start": "node dist/server.cjs",
-    "clean": "rm -rf dist server.js",
+    "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('server.js',{force:true});\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"server/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\" \"server.ts\" \"vite.config.ts\" \"*.{ts,tsx}\"",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
@@ -18,9 +18,13 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "check:all": "npm run format:check && npm run check && npm run build",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build --target aarch64-apple-darwin",
+    "tauri:build": "tauri build",
+    "tauri:build:debug": "tauri build --debug",
+    "desktop:fmt": "cargo fmt --check --manifest-path src-tauri/Cargo.toml",
+    "desktop:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "cargo:check": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml"
+    "cargo:check": "npm run desktop:fmt && npm run desktop:clippy && npm run desktop:test && npm run desktop:check"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
