@@ -1,0 +1,10 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen/schemas
+.aistudio
+coverage
+.vscode
+public
+*.min.js
+*.min.css

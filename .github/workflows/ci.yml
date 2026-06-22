@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+          cache: "npm"
+
+      - name: Log frontend toolchain
+        run: >-
+          node -e "console.log({ platform: process.platform, arch: process.arch, node: process.version })"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend gates
+        run: npm run check:all
+
+  rust-tauri:
+    name: Tauri (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            expectedNodeArch: x64
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            expectedNodeArch: x64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            expectedNodeArch: x64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            expectedNodeArch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Linux Tauri dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: ${{ matrix.target }}
+
+      - name: Log and verify runner toolchain
+        env:
+          EXPECTED_ARCH: ${{ matrix.expectedNodeArch }}
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: >-
+          node -e "const { execFileSync } = require('node:child_process'); console.log({ platform: process.platform, arch: process.arch, node: process.version, target: process.env.EXPECTED_TARGET }); console.log(execFileSync('rustc', ['-vV'], { encoding: 'utf8' })); if (process.arch !== process.env.EXPECTED_ARCH) process.exit(1)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rust format check
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets --all-features -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Rust check
+        run: cargo check --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Tauri unsigned debug build
+        run: npm run tauri:build -- --debug --target ${{ matrix.target }}

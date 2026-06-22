@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "openai.chatgpt",
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+    "vadimcn.vscode-lldb",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "github.vscode-pull-request-github"
+  ]
+}
