@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn path_detection_groups_allowed_tex_tools_by_bin_dir() {
         let temp_dir = make_temp_dir("texforge-runtime-path");
-        let script_path = temp_dir.join(executable_candidates("pdflatex").remove(0));
+        let script_path = temp_dir.join(test_executable_name("pdflatex"));
         write_test_executable(&script_path, "pdfTeX 3.141592653-test");
 
         let diagnostic =
@@ -510,7 +510,7 @@ mod tests {
     fn known_texlive_bin_infers_distribution_and_package_manager() {
         let temp_dir = make_temp_dir("texforge-runtime-texlive");
         write_test_executable(
-            &temp_dir.join(executable_candidates("tlmgr").remove(0)),
+            &temp_dir.join(test_executable_name("tlmgr")),
             "tlmgr revision 1",
         );
 
@@ -538,6 +538,17 @@ mod tests {
         ));
         fs::create_dir_all(&dir).expect("temp directory should be created");
         dir
+    }
+
+    fn test_executable_name(name: &str) -> String {
+        #[cfg(windows)]
+        {
+            format!("{name}.bat")
+        }
+        #[cfg(not(windows))]
+        {
+            name.to_string()
+        }
     }
 
     fn write_test_executable(path: &Path, output: &str) {
