@@ -557,6 +557,8 @@ mod tests {
             let mut file = fs::File::create(path).expect("test executable should be created");
             writeln!(file, "@echo off").unwrap();
             writeln!(file, "echo {output}").unwrap();
+            file.flush().unwrap();
+            file.sync_all().unwrap();
         }
 
         #[cfg(not(windows))]
@@ -565,6 +567,8 @@ mod tests {
             let mut file = fs::File::create(path).expect("test executable should be created");
             writeln!(file, "#!/bin/sh").unwrap();
             writeln!(file, "echo '{output}'").unwrap();
+            file.flush().unwrap();
+            file.sync_all().unwrap();
             let mut permissions = file.metadata().unwrap().permissions();
             permissions.set_mode(0o755);
             fs::set_permissions(path, permissions).unwrap();
