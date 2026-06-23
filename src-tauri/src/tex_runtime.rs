@@ -531,11 +531,11 @@ mod tests {
     }
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!(
-            "{prefix}-{}-{}",
-            std::process::id(),
-            Instant::now().elapsed().as_nanos()
-        ));
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let dir = env::temp_dir().join(format!("{prefix}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).expect("temp directory should be created");
         dir
     }

@@ -11,7 +11,11 @@ import {
 } from "lucide-react";
 import {
   detectTexRuntimes,
+  getTexRuntimeSelection,
+  saveTexRuntimeSelection,
+  TexRuntime,
   TexRuntimeDiagnostic,
+  TexRuntimeSelection,
 } from "../../utils/texRuntime";
 
 const docs = [
@@ -25,18 +29,37 @@ export function TexEnvironment() {
   const [diagnostic, setDiagnostic] = useState<TexRuntimeDiagnostic | null>(
     null,
   );
+  const [selection, setSelection] = useState<TexRuntimeSelection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingRuntimeId, setSavingRuntimeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      setDiagnostic(await detectTexRuntimes());
+      const [runtimeDiagnostic, runtimeSelection] = await Promise.all([
+        detectTexRuntimes(),
+        getTexRuntimeSelection(),
+      ]);
+      setDiagnostic(runtimeDiagnostic);
+      setSelection(runtimeSelection);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const selectRuntime = async (runtime: TexRuntime | null) => {
+    setSavingRuntimeId(runtime?.id ?? "__clear__");
+    setError(null);
+    try {
+      setSelection(await saveTexRuntimeSelection(runtime));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingRuntimeId(null);
     }
   };
 
@@ -45,9 +68,13 @@ export function TexEnvironment() {
 
     const detectInitial = async () => {
       try {
-        const result = await detectTexRuntimes();
+        const [runtimeDiagnostic, runtimeSelection] = await Promise.all([
+          detectTexRuntimes(),
+          getTexRuntimeSelection(),
+        ]);
         if (active) {
-          setDiagnostic(result);
+          setDiagnostic(runtimeDiagnostic);
+          setSelection(runtimeSelection);
         }
       } catch (err: unknown) {
         if (active) {
@@ -68,6 +95,9 @@ export function TexEnvironment() {
   }, []);
 
   const hasRuntime = (diagnostic?.runtimes.length ?? 0) > 0;
+  const selectedRuntime = diagnostic?.runtimes.find(
+    (runtime) => runtime.id === selection?.selectedRuntimeId,
+  );
 
   return (
     <div className="w-screen h-screen bg-zinc-950 text-zinc-200 flex flex-col font-sans overflow-hidden">
@@ -121,6 +151,12 @@ export function TexEnvironment() {
                   Host: {diagnostic?.hostOs ?? "detecting"} /{" "}
                   {diagnostic?.hostArch ?? "detecting"}
                 </p>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Selected runtime: {selectedRuntime?.distribution ?? "none"}
+                  {selection?.selectedBinDir
+                    ? ` · ${selection.selectedBinDir}`
+                    : ""}
+                </p>
               </div>
               <div
                 className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full ${
@@ -142,6 +178,25 @@ export function TexEnvironment() {
               <div className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-900/60 rounded-md p-3">
                 Missing core tools: {diagnostic.missingCoreTools.join(", ")}
               </div>
+            ) : null}
+
+            {selection?.selectedRuntimeId && !selectedRuntime ? (
+              <div className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-900/60 rounded-md p-3">
+                Saved runtime is no longer detected. Choose a detected runtime
+                or clear the selection.
+              </div>
+            ) : null}
+
+            {selection?.selectedRuntimeId ? (
+              <button
+                onClick={() => void selectRuntime(null)}
+                disabled={savingRuntimeId === "__clear__"}
+                className="mt-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 px-3 py-1.5 rounded-md text-sm border border-zinc-700"
+              >
+                {savingRuntimeId === "__clear__"
+                  ? "Clearing…"
+                  : "Clear selection"}
+              </button>
             ) : null}
           </section>
 
@@ -169,12 +224,31 @@ export function TexEnvironment() {
                         {runtime.packageManager}
                       </p>
                     </div>
-                    <div className="text-xs text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2">
-                      PDF: {runtime.capabilities.canCompilePdf ? "yes" : "no"}
-                      <br />
-                      Bib: {runtime.capabilities.hasBibliography ? "yes" : "no"}
-                      <br />
-                      SyncTeX: {runtime.capabilities.hasSynctex ? "yes" : "no"}
+                    <div className="flex flex-col items-start md:items-end gap-2">
+                      <div className="text-xs text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2">
+                        PDF: {runtime.capabilities.canCompilePdf ? "yes" : "no"}
+                        <br />
+                        Bib:{" "}
+                        {runtime.capabilities.hasBibliography ? "yes" : "no"}
+                        <br />
+                        SyncTeX:{" "}
+                        {runtime.capabilities.hasSynctex ? "yes" : "no"}
+                      </div>
+                      <button
+                        onClick={() => void selectRuntime(runtime)}
+                        disabled={savingRuntimeId !== null}
+                        className={`px-3 py-1.5 rounded-md text-sm border disabled:opacity-60 ${
+                          selection?.selectedRuntimeId === runtime.id
+                            ? "bg-emerald-500/10 text-emerald-300 border-emerald-900/60"
+                            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700"
+                        }`}
+                      >
+                        {selection?.selectedRuntimeId === runtime.id
+                          ? "Selected"
+                          : savingRuntimeId === runtime.id
+                            ? "Saving…"
+                            : "Use this runtime"}
+                      </button>
                     </div>
                   </div>
 

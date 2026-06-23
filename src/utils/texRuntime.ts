@@ -51,6 +51,13 @@ export type TexRuntimeDiagnostic = {
   notes: string[];
 };
 
+export type TexRuntimeSelection = {
+  contractVersion: typeof TEX_RUNTIME_CONTRACT_VERSION;
+  selectedRuntimeId: string | null;
+  selectedBinDir: string | null;
+  updatedAt: number | null;
+};
+
 const browserDiagnostic: TexRuntimeDiagnostic = {
   contractVersion: TEX_RUNTIME_CONTRACT_VERSION,
   hostOs: "web",
@@ -71,6 +78,14 @@ const distributions: TexDistributionKind[] = [
 const toolStatuses: TexToolStatus[] = ["available", "version-failed"];
 const runtimeStatuses: TexRuntimeStatus[] = ["available", "partial"];
 const packageManagers: PackageManagerKind[] = ["tlmgr", "mpm", "none"];
+const browserSelectionKey = "texforge.texRuntimeSelection.v1";
+
+const emptySelection: TexRuntimeSelection = {
+  contractVersion: TEX_RUNTIME_CONTRACT_VERSION,
+  selectedRuntimeId: null,
+  selectedBinDir: null,
+  updatedAt: null,
+};
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -118,6 +133,21 @@ const isTexRuntime = (value: unknown): value is TexRuntime => {
   );
 };
 
+export const isTexRuntimeSelection = (
+  value: unknown,
+): value is TexRuntimeSelection => {
+  if (typeof value !== "object" || value === null) return false;
+  const selection = value as Record<string, unknown>;
+  return (
+    selection.contractVersion === TEX_RUNTIME_CONTRACT_VERSION &&
+    (typeof selection.selectedRuntimeId === "string" ||
+      selection.selectedRuntimeId === null) &&
+    (typeof selection.selectedBinDir === "string" ||
+      selection.selectedBinDir === null) &&
+    (typeof selection.updatedAt === "number" || selection.updatedAt === null)
+  );
+};
+
 export const isTexRuntimeDiagnostic = (
   value: unknown,
 ): value is TexRuntimeDiagnostic => {
@@ -142,4 +172,49 @@ export const detectTexRuntimes = async (): Promise<TexRuntimeDiagnostic> => {
     throw new Error("Unsupported TeX runtime diagnostic contract");
   }
   return diagnostic;
+};
+
+export const getTexRuntimeSelection =
+  async (): Promise<TexRuntimeSelection> => {
+    if (!isTauri()) {
+      const stored = window.localStorage.getItem(browserSelectionKey);
+      if (!stored) return emptySelection;
+      try {
+        const value: unknown = JSON.parse(stored);
+        return isTexRuntimeSelection(value) ? value : emptySelection;
+      } catch {
+        return emptySelection;
+      }
+    }
+
+    const selection: unknown = await invoke("get_tex_runtime_selection");
+    if (!isTexRuntimeSelection(selection)) {
+      throw new Error("Unsupported TeX runtime selection contract");
+    }
+    return selection;
+  };
+
+export const saveTexRuntimeSelection = async (
+  runtime: TexRuntime | null,
+): Promise<TexRuntimeSelection> => {
+  if (!isTauri()) {
+    const selection: TexRuntimeSelection = runtime
+      ? {
+          contractVersion: TEX_RUNTIME_CONTRACT_VERSION,
+          selectedRuntimeId: runtime.id,
+          selectedBinDir: runtime.binDir,
+          updatedAt: Date.now(),
+        }
+      : emptySelection;
+    window.localStorage.setItem(browserSelectionKey, JSON.stringify(selection));
+    return selection;
+  }
+
+  const selection: unknown = await invoke("save_tex_runtime_selection", {
+    runtimeId: runtime?.id ?? null,
+  });
+  if (!isTexRuntimeSelection(selection)) {
+    throw new Error("Unsupported TeX runtime selection contract");
+  }
+  return selection;
 };

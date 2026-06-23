@@ -11,7 +11,7 @@ The repository source files are aligned with the `texforge-prompt-03` reference 
 
 Status: `verificato in CI`
 
-Latest phase added: Prompt 3/5 CI verification evidence — desktop matrix build compatibility and fixture-based TeX diagnostics.
+Latest phase added: Prompt 5 runtime selection baseline — global selected-runtime persistence.
 
 ## What Has Been Done
 
@@ -35,7 +35,9 @@ Latest phase added: Prompt 3/5 CI verification evidence — desktop matrix build
 - macOS CI builds unsigned `.app` bundles only to avoid unsigned DMG packaging fragility; installer packaging remains deferred.
 - Local TeX runtime diagnostic contract v1 is implemented.
 - Rust detects allowlisted TeX tools from process `PATH` and known platform TeX directories without invoking a shell.
-- LaTeX Environment screen is available at `#/tex-environment` from the dashboard.
+- Global selected-runtime persistence is implemented through versioned browser local storage or Tauri app-data JSON.
+- Tauri runtime selection accepts only currently detected runtime IDs; arbitrary executable paths remain deferred.
+- LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select or clear a detected runtime.
 
 ## Latest Verification
 
@@ -61,6 +63,20 @@ Evidence:
 - Tauri macOS Apple Silicon job passed Rust format, clippy, tests, check and unsigned `.app` debug build.
 - Tauri macOS Intel job passed Rust format, clippy, tests, check and unsigned `.app` debug build.
 
+### Runtime Selection Targeted Checks
+
+```bash
+npm test -- src/utils/texRuntime.test.ts
+PATH="$HOME/.cargo/bin:$PATH" cargo test --manifest-path src-tauri/Cargo.toml tex_runtime_selection_uses_the_versioned_frontend_contract -- --nocapture
+```
+
+Result: passed.
+
+Evidence:
+
+- Vitest: 1 file, 7 tests passed.
+- Rust targeted test passed.
+
 ### Frontend Gate
 
 ```bash
@@ -74,7 +90,7 @@ Evidence:
 - Prettier format check passed.
 - TypeScript typecheck passed.
 - ESLint passed.
-- Vitest passed: 16 test files, 58 tests.
+- Vitest passed: 16 test files, 61 tests.
 - Vite/web build passed.
 - Server bundle build passed.
 
@@ -105,7 +121,7 @@ Evidence:
 
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml` passed.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` passed.
-- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 7 tests.
+- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 8 tests.
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed.
 
 ### Git State
@@ -114,33 +130,39 @@ Evidence:
 git status --short
 ```
 
-Result before this update: clean after fast-forward to `1da29780`.
+Result before this update: clean at `b019d280`.
 
 Current intended changes:
 
-- `.github/workflows/ci.yml` was already fast-forwarded from remote with the macOS `.app` CI fix.
-- `docs/IMPLEMENTATION_STATUS.md` records CI evidence for the desktop matrix.
-- `docs/SUPPORT_MATRIX.md` records CI evidence and remaining manual/install limits.
-- `docs/PROJECT_HANDOFF_STATUS.md` records this verification pass.
+- `src-tauri/src/lib.rs` adds versioned selected-runtime persistence in app-data JSON.
+- `src-tauri/src/tex_runtime.rs` fixes flaky test temp directory naming.
+- `src/utils/texRuntime.ts` adds the selection contract and browser/Tauri adapters.
+- `src/features/texEnvironment/TexEnvironment.tsx` adds select and clear actions.
+- `src/utils/texRuntime.test.ts` covers selection validation and persistence.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the runtime selection baseline.
 
 ## External Documentation Checked
 
 Authoritative/current docs were checked through Context7:
 
 - Tauri v2 docs: `/websites/v2_tauri_app`
+- Tauri source/API docs: `/tauri-apps/tauri`
 - Vite v6 docs: `/websites/v6_vite_dev`
 - Topics checked:
   - Tauri 2 capabilities and `core:default`
   - Tauri Rust command invocation/state/security and shell risk guidance
   - window-state plugin setup
   - app-data/security-related patterns
+  - command access from Rust through `AppHandle`
+  - runtime-authority/capability denial model
   - Vite build/code-splitting guidance for known bundle warnings
 
 Relevant alignment:
 
 - `src-tauri/capabilities/default.json` grants only `core:default`.
 - `src-tauri/Cargo.toml` includes `tauri-plugin-window-state = "2"`.
-- Storage uses app data directory through Tauri path API in Rust, not broad frontend filesystem access.
+- Storage and runtime selection use app data directory through Tauri path API in Rust, not broad frontend filesystem access.
+- Runtime selection keeps command scope narrow and does not expose shell/process APIs to the frontend.
 
 ## Important Files
 
@@ -153,8 +175,8 @@ Relevant alignment:
 - `src-tauri/capabilities/default.json` — Tauri permissions.
 - `src-tauri/src/lib.rs` — Rust IPC commands and storage backend.
 - `src-tauri/src/tex_runtime.rs` — bounded TeX runtime/tool detection.
-- `src/utils/texRuntime.ts` — frontend TeX runtime diagnostic contract.
-- `src/features/texEnvironment/TexEnvironment.tsx` — LaTeX Environment diagnostics UI.
+- `src/utils/texRuntime.ts` — frontend TeX runtime diagnostic and selection contract.
+- `src/features/texEnvironment/TexEnvironment.tsx` — LaTeX Environment diagnostics and selection UI.
 - `src/` — React/Vite frontend.
 - `test/` and `src/**/*.test.tsx` — frontend/unit tests.
 
@@ -162,7 +184,8 @@ Relevant alignment:
 
 The app is not yet a fully offline production desktop LaTeX editor. Deferred or incomplete areas:
 
-- Runtime selection and per-project TeX runtime settings.
+- Per-project TeX runtime settings.
+- Custom authorized runtime paths.
 - Real distribution verification on Windows/Linux and installed-app smoke tests.
 - Offline/local LaTeX compilation.
 - SyncTeX support.
@@ -222,11 +245,16 @@ PATH="$HOME/.cargo/bin:$PATH" npm run cargo:check
 
 ### Option A — Complete Prompt 5 Runtime Selection
 
-Goal: add global and per-project TeX runtime selection after diagnostic baseline.
+Goal: extend the current global selected-runtime baseline into full runtime selection.
 
-Likely scope:
+Already done:
 
-- Persistent runtime selection settings.
+- Persistent global runtime selection settings.
+- Selection limited to currently detected runtime IDs.
+
+Likely remaining scope:
+
+- Per-project TeX runtime selection.
 - Custom authorized runtime paths.
 - Better architecture/version compatibility checks.
 - Diagnostic export with home/user redaction.

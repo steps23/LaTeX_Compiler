@@ -1,6 +1,6 @@
 mod tex_runtime;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fs, path::PathBuf};
 use tauri::Manager;
@@ -12,6 +12,7 @@ const PROJECT_STORAGE_DIR: &str = "projects";
 const PROJECT_METADATA_FILE: &str = "project.json";
 const FILE_MANIFEST_FILE: &str = "files.json";
 const PROJECT_FILES_DIR: &str = "files";
+const TEX_RUNTIME_SELECTION_FILE: &str = "tex-runtime-selection.json";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,15 @@ struct StorageInfo {
     contract_version: u8,
     backend: &'static str,
     project_root_dir: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TexRuntimeSelection {
+    contract_version: u8,
+    selected_runtime_id: Option<String>,
+    selected_bin_dir: Option<String>,
+    updated_at: Option<u64>,
 }
 
 #[tauri::command]
@@ -76,12 +86,18 @@ fn validated_project_path(path: &str) -> Result<PathBuf, String> {
     Ok(clean)
 }
 
-fn project_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn app_data_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let root = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("failed to resolve app data directory: {error}"))?
-        .join(PROJECT_STORAGE_DIR);
+        .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("failed to create app data directory: {error}"))?;
+    Ok(root)
+}
+
+fn project_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = app_data_root(app)?.join(PROJECT_STORAGE_DIR);
     fs::create_dir_all(&root)
         .map_err(|error| format!("failed to create project storage directory: {error}"))?;
     Ok(root)
@@ -110,6 +126,42 @@ fn read_json_file(path: PathBuf) -> Result<Option<Value>, String> {
             "failed to parse json file {}: {error}",
             path.to_string_lossy()
         )
+    })
+}
+
+fn empty_tex_runtime_selection() -> TexRuntimeSelection {
+    TexRuntimeSelection {
+        contract_version: tex_runtime::TEX_RUNTIME_CONTRACT_VERSION,
+        selected_runtime_id: None,
+        selected_bin_dir: None,
+        updated_at: None,
+    }
+}
+
+fn build_tex_runtime_selection(runtime_id: Option<String>) -> Result<TexRuntimeSelection, String> {
+    let Some(runtime_id) = runtime_id else {
+        return Ok(empty_tex_runtime_selection());
+    };
+    validate_id(&runtime_id)?;
+    let diagnostic = tex_runtime::detect_tex_runtimes();
+    let runtime = diagnostic
+        .runtimes
+        .into_iter()
+        .find(|runtime| runtime.id == runtime_id)
+        .ok_or_else(|| "selected TeX runtime was not detected".to_string())?;
+
+    Ok(TexRuntimeSelection {
+        contract_version: tex_runtime::TEX_RUNTIME_CONTRACT_VERSION,
+        selected_runtime_id: Some(runtime.id),
+        selected_bin_dir: Some(runtime.bin_dir),
+        updated_at: Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| format!("failed to resolve system time: {error}"))?
+                .as_millis()
+                .try_into()
+                .map_err(|_| "system time exceeds supported range".to_string())?,
+        ),
     })
 }
 
@@ -149,6 +201,30 @@ fn get_storage_info(app: tauri::AppHandle) -> Result<StorageInfo, String> {
 #[tauri::command]
 fn detect_tex_runtimes() -> TexRuntimeDiagnostic {
     tex_runtime::detect_tex_runtimes()
+}
+
+#[tauri::command]
+fn get_tex_runtime_selection(app: tauri::AppHandle) -> Result<TexRuntimeSelection, String> {
+    let path = app_data_root(&app)?.join(TEX_RUNTIME_SELECTION_FILE);
+    let Some(value) = read_json_file(path)? else {
+        return Ok(empty_tex_runtime_selection());
+    };
+    serde_json::from_value(value).map_err(|error| format!("invalid TeX runtime selection: {error}"))
+}
+
+#[tauri::command]
+fn save_tex_runtime_selection(
+    app: tauri::AppHandle,
+    runtime_id: Option<String>,
+) -> Result<TexRuntimeSelection, String> {
+    let selection = build_tex_runtime_selection(runtime_id)?;
+    let value = serde_json::to_value(&selection)
+        .map_err(|error| format!("failed to serialize TeX runtime selection: {error}"))?;
+    write_json_file(
+        app_data_root(&app)?.join(TEX_RUNTIME_SELECTION_FILE),
+        &value,
+    )?;
+    Ok(selection)
 }
 
 #[tauri::command]
@@ -301,6 +377,8 @@ pub fn run() {
             get_runtime_info,
             get_storage_info,
             detect_tex_runtimes,
+            get_tex_runtime_selection,
+            save_tex_runtime_selection,
             get_all_projects,
             get_project,
             save_project,
@@ -317,8 +395,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_tex_runtimes, get_runtime_info, validated_project_path, StorageInfo,
-        STORAGE_CONTRACT_VERSION,
+        detect_tex_runtimes, empty_tex_runtime_selection, get_runtime_info, validated_project_path,
+        StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -370,6 +448,17 @@ mod tests {
         assert!(info["runtimes"].is_array());
         assert!(info["missingCoreTools"].is_array());
         assert!(info["notes"].is_array());
+    }
+
+    #[test]
+    fn tex_runtime_selection_uses_the_versioned_frontend_contract() {
+        let info = serde_json::to_value(empty_tex_runtime_selection())
+            .expect("TeX runtime selection should be serializable");
+
+        assert_eq!(info["contractVersion"], 1);
+        assert!(info["selectedRuntimeId"].is_null());
+        assert!(info["selectedBinDir"].is_null());
+        assert!(info["updatedAt"].is_null());
     }
 
     #[test]

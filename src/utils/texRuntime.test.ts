@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { detectTexRuntimes, isTexRuntimeDiagnostic } from "./texRuntime";
+import {
+  detectTexRuntimes,
+  getTexRuntimeSelection,
+  isTexRuntimeDiagnostic,
+  isTexRuntimeSelection,
+  saveTexRuntimeSelection,
+} from "./texRuntime";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -11,6 +17,7 @@ const invokeMock = vi.mocked(invoke);
 describe("TeX runtime adapter", () => {
   beforeEach(() => {
     delete window.__TAURI_INTERNALS__;
+    window.localStorage.clear();
     invokeMock.mockReset();
   });
 
@@ -81,7 +88,61 @@ describe("TeX runtime adapter", () => {
     );
   });
 
-  test("exposes contract guard", () => {
+  test("persists browser runtime selection without IPC", async () => {
+    const runtime = {
+      id: "texlive-fixture",
+      distribution: "tex-live" as const,
+      version: "pdfTeX fixture",
+      arch: "aarch64",
+      rootDir: "/Library/TeX",
+      binDir: "/Library/TeX/texbin",
+      tools: [],
+      packageManager: "tlmgr" as const,
+      status: "available" as const,
+      detectionSource: "fixture",
+      compatibleWithHost: true,
+      capabilities: {
+        canCompilePdf: true,
+        hasBibliography: false,
+        hasPackageManager: true,
+        hasSynctex: false,
+      },
+    };
+
+    const saved = await saveTexRuntimeSelection(runtime);
+
+    expect(saved.selectedRuntimeId).toBe("texlive-fixture");
+    await expect(getTexRuntimeSelection()).resolves.toMatchObject({
+      selectedRuntimeId: "texlive-fixture",
+      selectedBinDir: "/Library/TeX/texbin",
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  test("uses Tauri runtime selection IPC", async () => {
+    window.__TAURI_INTERNALS__ = {};
+    const selection = {
+      contractVersion: 1,
+      selectedRuntimeId: "texlive-fixture",
+      selectedBinDir: "/Library/TeX/texbin",
+      updatedAt: 1710000000000,
+    };
+    invokeMock.mockResolvedValue(selection);
+
+    await expect(getTexRuntimeSelection()).resolves.toEqual(selection);
+    expect(invokeMock).toHaveBeenCalledWith("get_tex_runtime_selection");
+  });
+
+  test("rejects incompatible selection contract", async () => {
+    window.__TAURI_INTERNALS__ = {};
+    invokeMock.mockResolvedValue({ contractVersion: 2 });
+
+    await expect(getTexRuntimeSelection()).rejects.toThrow(
+      "Unsupported TeX runtime selection contract",
+    );
+  });
+
+  test("exposes contract guards", () => {
     expect(
       isTexRuntimeDiagnostic({
         contractVersion: 1,
@@ -90,6 +151,14 @@ describe("TeX runtime adapter", () => {
         runtimes: [],
         missingCoreTools: [],
         notes: [],
+      }),
+    ).toBe(true);
+    expect(
+      isTexRuntimeSelection({
+        contractVersion: 1,
+        selectedRuntimeId: "runtime-id",
+        selectedBinDir: "/opt/tex/bin",
+        updatedAt: 1710000000000,
       }),
     ).toBe(true);
   });
