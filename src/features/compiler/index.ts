@@ -1,13 +1,19 @@
+import type { LatexCompiler } from "../../types";
+import { isTauri } from "../../utils/runtime";
 import { HttpFallbackCompiler } from "./HttpFallbackCompiler";
+import { NativeLocalCompiler } from "./NativeLocalCompiler";
 
-// Factory for getting the current compiler.
-// We can swap this out to use WASM later when the worker is ready.
-
-let compilerInstance: HttpFallbackCompiler | null = null;
+let compilerInstance: LatexCompiler | null = null;
+let compilerRuntime: "browser" | "tauri" | null = null;
 
 export async function getCompiler() {
-  if (!compilerInstance) {
-    compilerInstance = new HttpFallbackCompiler();
+  const runtime = isTauri() ? "tauri" : "browser";
+  if (!compilerInstance || compilerRuntime !== runtime) {
+    compilerInstance =
+      runtime === "tauri"
+        ? new NativeLocalCompiler()
+        : new HttpFallbackCompiler();
+    compilerRuntime = runtime;
     await compilerInstance.initialize();
   }
   return compilerInstance;

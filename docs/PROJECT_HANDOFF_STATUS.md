@@ -11,7 +11,7 @@ The repository source files are aligned with the `texforge-prompt-03` reference 
 
 Status: `verificato in CI`
 
-Latest phase added: Prompt 5 runtime selection baseline — global selected-runtime persistence plus per-project overrides.
+Latest phase added: Prompt 6 local desktop compilation baseline — selected runtime wired to Tauri compile command.
 
 ## What Has Been Done
 
@@ -38,6 +38,8 @@ Latest phase added: Prompt 5 runtime selection baseline — global selected-runt
 - Global selected-runtime persistence is implemented through versioned browser local storage or Tauri app-data JSON.
 - Per-project runtime overrides are implemented in `ProjectSettings.texRuntimeId`; omitted means inherit global, `null` means disabled for that project, and a string means project-specific detected runtime ID.
 - Tauri runtime selection accepts only currently detected runtime IDs; arbitrary executable paths remain deferred.
+- Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, reads `main.pdf` and removes the workspace.
+- Browser compilation continues to use the HTTP fallback compiler.
 - LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select/clear global runtime plus set project inherit/disable/override behavior when a project is open.
 
 ## Latest Verification
@@ -91,7 +93,7 @@ Evidence:
 - Prettier format check passed.
 - TypeScript typecheck passed.
 - ESLint passed.
-- Vitest passed: 16 test files, 62 tests.
+- Vitest passed: 17 test files, 63 tests.
 - Vite/web build passed.
 - Server bundle build passed.
 
@@ -122,7 +124,7 @@ Evidence:
 
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml` passed.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` passed.
-- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 8 tests.
+- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 9 tests.
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed.
 
 ### Git State
@@ -131,18 +133,17 @@ Evidence:
 git status --short
 ```
 
-Result before this update: clean at `0889900c`.
+Result before this update: clean at `79dd3c26`.
 
 Current intended changes:
 
-- `src-tauri/src/lib.rs` adds versioned selected-runtime persistence in app-data JSON.
-- `src-tauri/src/tex_runtime.rs` fixes flaky test temp directory naming.
-- `src/types/index.ts` adds optional `ProjectSettings.texRuntimeId`.
-- `src/state/store.ts` adds project runtime override persistence.
-- `src/utils/texRuntime.ts` adds the selection contract, browser/Tauri adapters and effective runtime resolver.
-- `src/features/texEnvironment/TexEnvironment.tsx` adds global select/clear and project inherit/disable/override actions.
-- `src/utils/texRuntime.test.ts` covers selection validation, persistence and effective runtime resolution.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the runtime selection baseline.
+- `src-tauri/src/lib.rs` adds `compile_latex_project`, bounded compile workspaces, explicit TeX process invocation and native compile result contract tests.
+- `src/features/compiler/index.ts` selects native local compiler in Tauri and HTTP fallback in browser.
+- `src/features/compiler/NativeLocalCompiler.ts` adds the desktop compiler adapter.
+- `src/features/compiler/NativeLocalCompiler.test.ts` covers native compile IPC payloads and PDF byte hydration.
+- `src/components/Header.tsx` passes the current project to compiler resolution.
+- `src/types/index.ts` allows compiler adapters to receive optional project context.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the local desktop compilation baseline.
 
 ## External Documentation Checked
 
@@ -158,6 +159,7 @@ Authoritative/current docs were checked through Context7:
   - app-data/security-related patterns
   - command access from Rust through `AppHandle`
   - runtime-authority/capability denial model
+  - Rust `Command` process invocation and timeout handling
   - Vite build/code-splitting guidance for known bundle warnings
 
 Relevant alignment:
@@ -165,7 +167,7 @@ Relevant alignment:
 - `src-tauri/capabilities/default.json` grants only `core:default`.
 - `src-tauri/Cargo.toml` includes `tauri-plugin-window-state = "2"`.
 - Storage and runtime selection use app data directory through Tauri path API in Rust, not broad frontend filesystem access.
-- Runtime selection keeps command scope narrow and does not expose shell/process APIs to the frontend.
+- Runtime selection and local compilation keep command scope narrow and do not expose shell/process APIs to the frontend.
 
 ## Important Files
 
@@ -214,7 +216,7 @@ The app is not yet a fully offline production desktop LaTeX editor. Deferred or 
 - Keep platform-specific code behind adapters.
 - Do not claim cross-platform support unless verified on target OS/hardware or CI runner.
 - Desktop mode must not require Express/web server runtime beyond Vite dev server during development.
-- Remote HTTP compiler fallback still exists; do not describe app as offline-first until local compilation lands.
+- Remote HTTP compiler fallback still exists for browser builds; desktop local compilation needs real-machine verification before release-support claims.
 
 ## Recommended Next Agent Flow
 
@@ -272,16 +274,20 @@ Acceptance:
 
 Goal: compile a project locally through bounded Rust command execution.
 
-Prerequisite: Option A or equivalent detection contract.
+Already done:
 
-Likely scope:
+- Job workspace under app-managed cache directory.
+- Selected detected TeX executable only; no arbitrary compiler path.
+- Fixed compiler arguments, no shell, timeout and workspace cleanup.
+- PDF byte collection and baseline error log parsing.
+- Frontend IPC adapter and native result contract test.
 
-- Job workspace under app-managed temp/cache directory.
-- Strict command allowlist.
-- Timeout and output size limits.
-- PDF/artifact collection.
-- Error log parsing baseline.
-- Tests for path validation and command bounds.
+Likely remaining scope:
+
+- Cancellation/job registry.
+- Output size limits.
+- Multi-run fallback for non-`latexmk` engines.
+- Real TeX smoke tests on macOS, Windows and Linux.
 
 ### Option C — Platform Verification Matrix
 

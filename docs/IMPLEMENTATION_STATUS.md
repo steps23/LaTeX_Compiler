@@ -46,14 +46,13 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Per-project runtime settings         | verificato localmente | Projects can inherit global selection, override it with a detected runtime ID, or explicitly disable local runtime usage    |
 | Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                       |
 | Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                      |
-| Local compilation                    | non verificato        | Deferred to Prompt 6; remote HTTP compiler fallback remains active                                                          |
+| Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable; no shell or arbitrary path is exposed  |
 
 ## Deferred Beyond Current State
 
 - SQLite metadata storage.
 - Custom authorized runtime paths.
-- Local TeX compilation.
 - SyncTeX, texlab/LSP, collaboration and Git.
 - Security audit, packaging, signing, installers and updater.
 
-The remote HTTP compiler remains active. TeXForge is therefore not yet an offline desktop editor and no operating system is declared release-supported.
+The remote HTTP compiler remains active for browser builds. Desktop local compilation is implemented but still needs real-machine verification across Windows, Linux and macOS before any operating system is declared release-supported.

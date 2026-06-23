@@ -94,7 +94,11 @@ export type AppSettings = {
 
 export interface LatexCompiler {
   initialize(): Promise<void>;
-  compile(files: FileNode[], mainPath: string): Promise<CompileResult>;
+  compile(
+    files: FileNode[],
+    mainPath: string,
+    project?: Project | null,
+  ): Promise<CompileResult>;
   cancel(): void;
   dispose(): void;
 }

@@ -19,7 +19,7 @@ Desktop startup does not depend on `server.ts` or Express. `HashRouter` keeps da
 
 ## Native Boundary
 
-`src-tauri/src/lib.rs` exposes runtime/storage introspection, TeX runtime diagnostics and selection plus bounded project-storage commands: `detect_tex_runtimes`, `get_tex_runtime_selection`, `save_tex_runtime_selection`, `get_all_projects`, `get_project`, `save_project`, `delete_project`, `get_project_files`, `get_file`, `save_file` and `delete_file`. All native storage is constrained to Tauri's app data directory. Project IDs and project-relative paths are validated before disk access. Runtime selection is persisted as app-owned JSON and stores only the selected detected runtime ID/bin directory. No global filesystem permission, database, compiler process or generic shell command exists.
+`src-tauri/src/lib.rs` exposes runtime/storage introspection, TeX runtime diagnostics and selection, local TeX compilation plus bounded project-storage commands: `detect_tex_runtimes`, `get_tex_runtime_selection`, `save_tex_runtime_selection`, `compile_latex_project`, `get_all_projects`, `get_project`, `save_project`, `delete_project`, `get_project_files`, `get_file`, `save_file` and `delete_file`. All native storage is constrained to Tauri's app data directory and all compile workspaces are constrained to Tauri's app cache directory. Project IDs and project-relative paths are validated before disk access. Runtime selection is persisted as app-owned JSON and stores only the selected detected runtime ID/bin directory. Local compilation invokes an explicit detected TeX executable with fixed arguments through Rust `Command`; no global filesystem permission or generic shell command exists.
 
 `src-tauri/src/tex_runtime.rs` probes process `PATH` and known platform TeX bin directories. It canonicalizes candidate executable paths, runs only allowlisted TeX binaries with separated `--version` arguments, applies a timeout and output cap, and returns diagnostics. It does not scan whole disks, mutate system PATH, install packages, invoke `sudo`, or compile user projects.
 
@@ -32,7 +32,7 @@ The main capability grants only `core:default`. Production CSP allows bundled re
 - `src/state`, `src/db`: Zustand plus runtime-selected persistence, IndexedDB in browser and app-data filesystem in Tauri.
 - `src/features/editor`: local Monaco workers.
 - `src/features/pdfViewer`: local PDF.js worker.
-- `src/features/compiler`: HTTP fallback compiler, still remote in this phase.
+- `src/features/compiler`: browser HTTP fallback compiler and desktop native local compiler adapter.
 - `src/features/texEnvironment`: desktop diagnostics, global selection and per-project overrides for existing local TeX tools, not local compilation.
 
 WKWebView, WebView2 and WebKitGTK consume the same bundled UI and CSP. Native build jobs exercise configuration compatibility; they do not prove manual interaction or installed-app behavior.

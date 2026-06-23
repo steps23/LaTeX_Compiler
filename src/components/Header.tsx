@@ -41,7 +41,11 @@ export function Header() {
     try {
       await flushProject(currentProject.id);
       const compiler = await getCompiler();
-      const result = await compiler.compile(files, currentProject.mainFilePath);
+      const result = await compiler.compile(
+        files,
+        currentProject.mainFilePath,
+        currentProject,
+      );
       setCompileResult(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

@@ -2,7 +2,13 @@ mod tex_runtime;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::PathBuf,
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 use tauri::Manager;
 use tex_runtime::TexRuntimeDiagnostic;
 
@@ -13,6 +19,8 @@ const PROJECT_METADATA_FILE: &str = "project.json";
 const FILE_MANIFEST_FILE: &str = "files.json";
 const PROJECT_FILES_DIR: &str = "files";
 const TEX_RUNTIME_SELECTION_FILE: &str = "tex-runtime-selection.json";
+const COMPILE_WORK_DIR: &str = "compile-workspaces";
+const COMPILE_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +48,45 @@ struct TexRuntimeSelection {
     selected_runtime_id: Option<String>,
     selected_bin_dir: Option<String>,
     updated_at: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompileFilePayload {
+    path: String,
+    is_folder: bool,
+    content: Option<String>,
+    binary_bytes: Option<Vec<u8>>,
+    is_deleted: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompileLatexRequest {
+    main_path: String,
+    runtime_id: Option<String>,
+    files: Vec<CompileFilePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeCompileMessage {
+    severity: &'static str,
+    message: String,
+    file: Option<String>,
+    line: Option<u64>,
+    context: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeCompileResult {
+    success: bool,
+    pdf_bytes: Option<Vec<u8>>,
+    raw_log: String,
+    errors: Vec<NativeCompileMessage>,
+    warnings: Vec<NativeCompileMessage>,
+    duration_ms: u64,
 }
 
 #[tauri::command]
@@ -165,6 +212,214 @@ fn build_tex_runtime_selection(runtime_id: Option<String>) -> Result<TexRuntimeS
     })
 }
 
+fn empty_compile_error(message: impl Into<String>, duration_ms: u64) -> NativeCompileResult {
+    let message = message.into();
+    NativeCompileResult {
+        success: false,
+        pdf_bytes: None,
+        raw_log: message.clone(),
+        errors: vec![NativeCompileMessage {
+            severity: "error",
+            message,
+            file: None,
+            line: None,
+            context: None,
+        }],
+        warnings: vec![],
+        duration_ms,
+    }
+}
+
+fn compile_workspace_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("failed to resolve app cache directory: {error}"))?
+        .join(COMPILE_WORK_DIR);
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("failed to create compile cache directory: {error}"))?;
+    Ok(root)
+}
+
+fn unique_compile_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("failed to resolve system time: {error}"))?
+        .as_nanos();
+    let dir = compile_workspace_root(app)?.join(format!("compile-{}-{unique}", std::process::id()));
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create compile workspace: {error}"))?;
+    Ok(dir)
+}
+
+fn write_compile_workspace(
+    work_dir: &std::path::Path,
+    request: &CompileLatexRequest,
+) -> Result<(), String> {
+    let main_path = validated_project_path(&request.main_path)?;
+    let mut has_main_file = false;
+
+    for file in &request.files {
+        if file.is_folder || file.is_deleted.unwrap_or(false) {
+            continue;
+        }
+        let relative_path = validated_project_path(&file.path)?;
+        if relative_path == main_path {
+            has_main_file = true;
+        }
+        let disk_path = work_dir.join(relative_path);
+        if let Some(parent) = disk_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create compile file parent: {error}"))?;
+        }
+        if let Some(content) = &file.content {
+            fs::write(&disk_path, content)
+                .map_err(|error| format!("failed to write compile text file: {error}"))?;
+        } else if let Some(bytes) = &file.binary_bytes {
+            fs::write(&disk_path, bytes)
+                .map_err(|error| format!("failed to write compile binary file: {error}"))?;
+        }
+    }
+
+    if !has_main_file {
+        return Err(format!("main file {} not found", request.main_path));
+    }
+    Ok(())
+}
+
+fn selected_compile_tool(runtime_id: &str) -> Result<(String, String, Vec<String>), String> {
+    validate_id(runtime_id)?;
+    let diagnostic = tex_runtime::detect_tex_runtimes();
+    let runtime = diagnostic
+        .runtimes
+        .into_iter()
+        .find(|runtime| runtime.id == runtime_id)
+        .ok_or_else(|| "selected TeX runtime was not detected".to_string())?;
+
+    let available_path = |name: &str| {
+        runtime
+            .tools
+            .iter()
+            .find(|tool| tool.name == name && tool.status == tex_runtime::TexToolStatus::Available)
+            .map(|tool| tool.path.clone())
+    };
+
+    if let Some(path) = available_path("latexmk") {
+        return Ok((
+            "latexmk".into(),
+            path,
+            vec![
+                "-pdf".into(),
+                "-interaction=nonstopmode".into(),
+                "-halt-on-error".into(),
+                "-file-line-error".into(),
+                request_safe_job_arg(),
+            ],
+        ));
+    }
+    for name in ["pdflatex", "xelatex", "lualatex"] {
+        if let Some(path) = available_path(name) {
+            return Ok((
+                name.into(),
+                path,
+                vec![
+                    "-interaction=nonstopmode".into(),
+                    "-halt-on-error".into(),
+                    "-file-line-error".into(),
+                    request_safe_job_arg(),
+                ],
+            ));
+        }
+    }
+
+    Err("selected TeX runtime has no available PDF compiler".into())
+}
+
+fn request_safe_job_arg() -> String {
+    "-jobname=main".into()
+}
+
+fn run_compile_process(
+    tool_path: &str,
+    args: &[String],
+    main_path: &str,
+    work_dir: &std::path::Path,
+) -> Result<(bool, String), String> {
+    let main_path = validated_project_path(main_path)?;
+    let mut child = Command::new(tool_path)
+        .args(args)
+        .arg(main_path)
+        .current_dir(work_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("failed to start local TeX compiler: {error}"))?;
+
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child
+                    .wait_with_output()
+                    .map_err(|error| format!("failed to read compiler output: {error}"))?;
+                let mut log = String::from_utf8_lossy(&output.stdout).into_owned();
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stderr.trim().is_empty() {
+                    log.push_str("\n--- stderr ---\n");
+                    log.push_str(&stderr);
+                }
+                return Ok((status.success(), log));
+            }
+            Ok(None) if start.elapsed() >= COMPILE_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("local TeX compilation timed out".into());
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(50)),
+            Err(error) => return Err(format!("failed waiting for compiler: {error}")),
+        }
+    }
+}
+
+fn parse_compile_errors(raw_log: &str) -> Vec<NativeCompileMessage> {
+    let mut errors = Vec::new();
+    for line in raw_log.lines() {
+        if let Some((file, rest)) = line.split_once(':') {
+            if let Some((line_number, message)) = rest.split_once(':') {
+                if let Ok(line_number) = line_number.parse::<u64>() {
+                    errors.push(NativeCompileMessage {
+                        severity: "error",
+                        message: message.trim().to_string(),
+                        file: Some(file.to_string()),
+                        line: Some(line_number),
+                        context: Some(line.to_string()),
+                    });
+                }
+            }
+        }
+        if errors.is_empty() && line.starts_with('!') {
+            errors.push(NativeCompileMessage {
+                severity: "error",
+                message: line.trim_start_matches('!').trim().to_string(),
+                file: None,
+                line: None,
+                context: Some(line.to_string()),
+            });
+        }
+    }
+    if errors.is_empty() {
+        errors.push(NativeCompileMessage {
+            severity: "error",
+            message: "Local TeX compilation failed".into(),
+            file: None,
+            line: None,
+            context: None,
+        });
+    }
+    errors
+}
+
 fn write_json_file(path: PathBuf, value: &Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -225,6 +480,69 @@ fn save_tex_runtime_selection(
         &value,
     )?;
     Ok(selection)
+}
+
+#[tauri::command]
+fn compile_latex_project(
+    app: tauri::AppHandle,
+    request: CompileLatexRequest,
+) -> Result<NativeCompileResult, String> {
+    let start = Instant::now();
+    let Some(runtime_id) = request.runtime_id.as_deref() else {
+        return Ok(empty_compile_error(
+            "No TeX runtime selected. Open LaTeX Environment and choose a runtime before compiling locally.",
+            0,
+        ));
+    };
+
+    let work_dir = unique_compile_dir(&app)?;
+    let result = (|| -> Result<NativeCompileResult, String> {
+        write_compile_workspace(&work_dir, &request)?;
+        let (tool_name, tool_path, args) = selected_compile_tool(runtime_id)?;
+        let (success, raw_log) =
+            run_compile_process(&tool_path, &args, &request.main_path, &work_dir)?;
+        let duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+        let pdf_path = work_dir.join("main.pdf");
+        let pdf_bytes = if success && pdf_path.is_file() {
+            Some(
+                fs::read(&pdf_path)
+                    .map_err(|error| format!("failed to read compiled PDF: {error}"))?,
+            )
+        } else {
+            None
+        };
+
+        if success && pdf_bytes.is_some() {
+            Ok(NativeCompileResult {
+                success: true,
+                pdf_bytes,
+                raw_log: format!("Local TeX compilation succeeded with {tool_name}.\n\n{raw_log}"),
+                errors: vec![],
+                warnings: vec![],
+                duration_ms,
+            })
+        } else {
+            let errors = parse_compile_errors(&raw_log);
+            Ok(NativeCompileResult {
+                success: false,
+                pdf_bytes: None,
+                raw_log,
+                errors,
+                warnings: vec![],
+                duration_ms,
+            })
+        }
+    })();
+
+    let _ = fs::remove_dir_all(&work_dir);
+
+    match result {
+        Ok(result) => Ok(result),
+        Err(error) => Ok(empty_compile_error(
+            error,
+            start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
+        )),
+    }
 }
 
 #[tauri::command]
@@ -379,6 +697,7 @@ pub fn run() {
             detect_tex_runtimes,
             get_tex_runtime_selection,
             save_tex_runtime_selection,
+            compile_latex_project,
             get_all_projects,
             get_project,
             save_project,
@@ -395,8 +714,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_tex_runtimes, empty_tex_runtime_selection, get_runtime_info, validated_project_path,
-        StorageInfo, STORAGE_CONTRACT_VERSION,
+        detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection, get_runtime_info,
+        validated_project_path, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -448,6 +767,18 @@ mod tests {
         assert!(info["runtimes"].is_array());
         assert!(info["missingCoreTools"].is_array());
         assert!(info["notes"].is_array());
+    }
+
+    #[test]
+    fn native_compile_result_uses_the_frontend_contract() {
+        let info = serde_json::to_value(empty_compile_error("fixture", 12))
+            .expect("native compile result should be serializable");
+
+        assert_eq!(info["success"], false);
+        assert!(info["pdfBytes"].is_null());
+        assert_eq!(info["rawLog"], "fixture");
+        assert_eq!(info["errors"][0]["severity"], "error");
+        assert_eq!(info["durationMs"], 12);
     }
 
     #[test]
