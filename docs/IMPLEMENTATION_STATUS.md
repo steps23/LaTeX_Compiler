@@ -4,23 +4,23 @@ Status labels: `predisposto`, `verificato localmente`, `verificato in CI`, `veri
 
 ## Prompt 3
 
-| Area                                 | Stato                 | Evidence                                                                     |
-| ------------------------------------ | --------------------- | ---------------------------------------------------------------------------- |
-| React/Vite browser baseline          | verificato localmente | Frontend gates and browser unit/component tests                              |
-| Hash routing                         | verificato localmente | Direct route, refresh, fallback, back and forward tests                      |
-| Runtime IPC contract v1              | verificato localmente | TypeScript validation tests and Rust serialization test                      |
-| Desktop Vite startup without Express | predisposto           | Tauri config points directly to Vite; local smoke recorded in support matrix |
-| Window restore                       | predisposto           | Official window-state plugin configured; persistence requires restart smoke  |
-| Least-privilege capability           | verificato localmente | Only `core:default`; no fs, shell, dialog, opener or process permission      |
-| CSP on WKWebView                     | predisposto           | Local native build/smoke evidence recorded separately                        |
-| CSP on WebView2                      | predisposto           | Native Windows CI job configured; no completed run recorded here             |
-| CSP on WebKitGTK                     | predisposto           | Native Ubuntu CI job configured; no completed run recorded here              |
-| macOS Apple Silicon                  | verificato localmente | `npm run tauri:build -- --debug` produced local app and DMG on host          |
-| macOS Intel                          | predisposto           | Native `macos-15-intel` CI job configured; no completed run recorded here    |
-| Windows x64                          | predisposto           | Native `windows-2022` CI job configured; no completed run recorded here      |
-| Linux x64                            | predisposto           | Native `ubuntu-22.04` CI job configured; no completed run recorded here      |
+| Area                                 | Stato                 | Evidence                                                                               |
+| ------------------------------------ | --------------------- | -------------------------------------------------------------------------------------- |
+| React/Vite browser baseline          | verificato localmente | Frontend gates and browser unit/component tests                                        |
+| Hash routing                         | verificato localmente | Direct route, refresh, fallback, back and forward tests                                |
+| Runtime IPC contract v1              | verificato localmente | TypeScript validation tests and Rust serialization test                                |
+| Desktop Vite startup without Express | verificato in CI      | Tauri debug builds run from bundled Vite assets; `server.ts` is not used by desktop CI |
+| Window restore                       | verificato in CI      | Official window-state plugin compiles and bundles across the desktop CI matrix         |
+| Least-privilege capability           | verificato in CI      | Only `core:default`; frontend/Rust gates and native builds pass in CI                  |
+| CSP on WKWebView                     | verificato in CI      | macOS Apple Silicon and Intel Tauri debug app bundle builds pass in CI                 |
+| CSP on WebView2                      | verificato in CI      | Windows x64 Tauri debug build passes in CI                                             |
+| CSP on WebKitGTK                     | verificato in CI      | Ubuntu x64 Tauri debug build passes in CI                                              |
+| macOS Apple Silicon                  | verificato in CI      | `macos-15` / `aarch64-apple-darwin` CI build passes; local app and DMG also built      |
+| macOS Intel                          | verificato in CI      | `macos-15-intel` / `x86_64-apple-darwin` CI app bundle build passes                    |
+| Windows x64                          | verificato in CI      | `windows-2022` / `x86_64-pc-windows-msvc` CI build passes                              |
+| Linux x64                            | verificato in CI      | `ubuntu-22.04` / `x86_64-unknown-linux-gnu` CI build passes                            |
 
-The earlier public CI run `27682061084` covers the pre-Prompt-3 baseline only. It is not evidence for this desktop matrix.
+CI evidence: public run `28040181526` passed frontend gates plus Tauri format, clippy, tests, checks and unsigned debug builds across Ubuntu x64, Windows x64, macOS Intel and macOS Apple Silicon. macOS CI intentionally builds `.app` bundles only; DMG packaging, signing and notarization remain deferred.
 
 ## Prompt 4
 
@@ -36,15 +36,15 @@ The earlier public CI run `27682061084` covers the pre-Prompt-3 baseline only. I
 
 ## Prompt 5 Baseline
 
-| Area                                 | Stato                 | Evidence                                                                                       |
-| ------------------------------------ | --------------------- | ---------------------------------------------------------------------------------------------- |
-| TeX runtime diagnostic contract v1   | verificato localmente | TypeScript validation tests and Rust serialization test                                        |
-| Bounded TeX tool detection           | verificato localmente | Rust tests cover absent runtime and fixture binaries; no shell is invoked                      |
-| TeX Environment UI                   | verificato localmente | Frontend typecheck, lint, tests and build pass; route available at `#/tex-environment`         |
-| MacTeX / TeX Live / MiKTeX detection | predisposto           | Known platform paths and PATH probing implemented; real Windows/Linux/MiKTeX runs not recorded |
-| Runtime selection                    | non verificato        | Deferred to a later Prompt 5 increment                                                         |
-| Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                         |
-| Local compilation                    | non verificato        | Deferred to Prompt 6; remote HTTP compiler fallback remains active                             |
+| Area                                 | Stato                 | Evidence                                                                                                                  |
+| ------------------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| TeX runtime diagnostic contract v1   | verificato localmente | TypeScript validation tests and Rust serialization test                                                                   |
+| Bounded TeX tool detection           | verificato localmente | Rust tests cover absent runtime and fixture binaries; no shell is invoked                                                 |
+| TeX Environment UI                   | verificato localmente | Frontend typecheck, lint, tests and build pass; route available at `#/tex-environment`                                    |
+| MacTeX / TeX Live / MiKTeX detection | verificato in CI      | Detection code and fixture tests pass on macOS, Windows and Linux CI; real installed distributions are still not verified |
+| Runtime selection                    | non verificato        | Deferred to a later Prompt 5 increment                                                                                    |
+| Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                    |
+| Local compilation                    | non verificato        | Deferred to Prompt 6; remote HTTP compiler fallback remains active                                                        |
 
 ## Deferred Beyond Current State
 

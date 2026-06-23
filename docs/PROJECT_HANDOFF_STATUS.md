@@ -1,6 +1,6 @@
 # Project Handoff Status
 
-Date: 2026-06-22
+Date: 2026-06-23
 Project: TeXForge / LaTeX_Compiler
 Repository: `/Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler`
 Reference worktree/prompt source: `/Users/stefano_ruggiero/Documents/LaTeX app/texforge-prompt-03`
@@ -9,9 +9,9 @@ Reference worktree/prompt source: `/Users/stefano_ruggiero/Documents/LaTeX app/t
 
 The repository source files are aligned with the `texforge-prompt-03` reference worktree. No source changes were required during the latest verification pass.
 
-Status: `verificato localmente`
+Status: `verificato in CI`
 
-Latest phase added: Prompt 5 baseline — local TeX runtime diagnostics.
+Latest phase added: Prompt 3/5 CI verification evidence — desktop matrix build compatibility and fixture-based TeX diagnostics.
 
 ## What Has Been Done
 
@@ -31,6 +31,8 @@ Latest phase added: Prompt 5 baseline — local TeX runtime diagnostics.
 - Tauri CSP configured for production and development.
 - Window restore plugin dependency present and configured in Rust.
 - Frontend and Rust/Tauri local gates pass when Rust toolchain is on `PATH`.
+- CI run `28040181526` passes frontend gates and the desktop Tauri matrix for Ubuntu x64, Windows x64, macOS Intel and macOS Apple Silicon.
+- macOS CI builds unsigned `.app` bundles only to avoid unsigned DMG packaging fragility; installer packaging remains deferred.
 - Local TeX runtime diagnostic contract v1 is implemented.
 - Rust detects allowlisted TeX tools from process `PATH` and known platform TeX directories without invoking a shell.
 - LaTeX Environment screen is available at `#/tex-environment` from the dashboard.
@@ -43,15 +45,21 @@ Run from:
 cd /Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler
 ```
 
-### Source Alignment
+### CI Gate
 
 ```bash
-diff -qr --exclude='.git' --exclude='node_modules' --exclude='dist' --exclude='target' --exclude='.DS_Store' \
-  '/Users/stefano_ruggiero/Documents/LaTeX app/texforge-prompt-03' \
-  '/Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler'
+gh run view 28040181526 --json status,conclusion,jobs
 ```
 
-Result: no source differences.
+Result: passed.
+
+Evidence:
+
+- Frontend job passed `npm run check:all` on Ubuntu 22.04.
+- Tauri Ubuntu x64 job passed Rust format, clippy, tests, check and unsigned debug build.
+- Tauri Windows x64 job passed Rust format, clippy, tests, check and unsigned debug build.
+- Tauri macOS Apple Silicon job passed Rust format, clippy, tests, check and unsigned `.app` debug build.
+- Tauri macOS Intel job passed Rust format, clippy, tests, check and unsigned `.app` debug build.
 
 ### Frontend Gate
 
@@ -106,9 +114,14 @@ Evidence:
 git status --short
 ```
 
-Result before this handoff file: clean.
+Result before this update: clean after fast-forward to `1da29780`.
 
-After this handoff file: this file is the only intended new change.
+Current intended changes:
+
+- `.github/workflows/ci.yml` was already fast-forwarded from remote with the macOS `.app` CI fix.
+- `docs/IMPLEMENTATION_STATUS.md` records CI evidence for the desktop matrix.
+- `docs/SUPPORT_MATRIX.md` records CI evidence and remaining manual/install limits.
+- `docs/PROJECT_HANDOFF_STATUS.md` records this verification pass.
 
 ## External Documentation Checked
 
@@ -164,7 +177,7 @@ The app is not yet a fully offline production desktop LaTeX editor. Deferred or 
 - Real-machine verification on Windows x64.
 - Real-machine verification on Linux x64.
 - macOS Intel verification.
-- CI verification for the current desktop matrix.
+- Installed-app smoke tests for the current desktop matrix.
 - Cross-platform installed-app smoke tests.
 - Performance tuning/code splitting for large frontend chunks.
 
