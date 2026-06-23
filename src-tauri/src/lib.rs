@@ -21,6 +21,8 @@ const PROJECT_FILES_DIR: &str = "files";
 const TEX_RUNTIME_SELECTION_FILE: &str = "tex-runtime-selection.json";
 const COMPILE_WORK_DIR: &str = "compile-workspaces";
 const COMPILE_TIMEOUT: Duration = Duration::from_secs(45);
+const MAX_COMPILE_LOG_BYTES: u64 = 1_000_000;
+const MAX_PDF_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -339,20 +341,54 @@ fn request_safe_job_arg() -> String {
     "-jobname=main".into()
 }
 
+fn read_capped_text_file(path: &std::path::Path, label: &str) -> Result<String, String> {
+    if !path.is_file() {
+        return Ok(String::new());
+    }
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    let truncated = bytes.len() as u64 > MAX_COMPILE_LOG_BYTES;
+    let mut bytes = bytes;
+    bytes.truncate(MAX_COMPILE_LOG_BYTES as usize);
+    let mut text = String::from_utf8_lossy(&bytes).into_owned();
+    if truncated {
+        text.push_str("\n[TeXForge truncated compiler output at 1000000 bytes]\n");
+    }
+    Ok(text)
+}
+
+fn read_pdf_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("failed to inspect compiled PDF: {error}"))?;
+    if metadata.len() > MAX_PDF_BYTES {
+        return Err(format!(
+            "compiled PDF exceeds maximum supported size of {MAX_PDF_BYTES} bytes"
+        ));
+    }
+    fs::read(path).map_err(|error| format!("failed to read compiled PDF: {error}"))
+}
+
 fn run_compile_process(
     tool_path: &str,
     args: &[String],
     main_path: &str,
     work_dir: &std::path::Path,
+    run_number: usize,
 ) -> Result<(bool, String), String> {
     let main_path = validated_project_path(main_path)?;
+    let stdout_path = work_dir.join(format!("texforge-stdout-{run_number}.log"));
+    let stderr_path = work_dir.join(format!("texforge-stderr-{run_number}.log"));
+    let stdout = fs::File::create(&stdout_path)
+        .map_err(|error| format!("failed to create compiler stdout log: {error}"))?;
+    let stderr = fs::File::create(&stderr_path)
+        .map_err(|error| format!("failed to create compiler stderr log: {error}"))?;
+
     let mut child = Command::new(tool_path)
         .args(args)
         .arg(main_path)
         .current_dir(work_dir)
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .spawn()
         .map_err(|error| format!("failed to start local TeX compiler: {error}"))?;
 
@@ -360,11 +396,9 @@ fn run_compile_process(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let output = child
-                    .wait_with_output()
-                    .map_err(|error| format!("failed to read compiler output: {error}"))?;
-                let mut log = String::from_utf8_lossy(&output.stdout).into_owned();
-                let stderr = String::from_utf8_lossy(&output.stderr);
+                let _ = child.wait();
+                let mut log = read_capped_text_file(&stdout_path, "compiler stdout")?;
+                let stderr = read_capped_text_file(&stderr_path, "compiler stderr")?;
                 if !stderr.trim().is_empty() {
                     log.push_str("\n--- stderr ---\n");
                     log.push_str(&stderr);
@@ -499,15 +533,23 @@ fn compile_latex_project(
     let result = (|| -> Result<NativeCompileResult, String> {
         write_compile_workspace(&work_dir, &request)?;
         let (tool_name, tool_path, args) = selected_compile_tool(runtime_id)?;
-        let (success, raw_log) =
-            run_compile_process(&tool_path, &args, &request.main_path, &work_dir)?;
+        let compile_runs = if tool_name == "latexmk" { 1 } else { 2 };
+        let mut success = false;
+        let mut raw_log = String::new();
+        for run_number in 1..=compile_runs {
+            let (run_success, run_log) =
+                run_compile_process(&tool_path, &args, &request.main_path, &work_dir, run_number)?;
+            raw_log.push_str(&format!("\n--- {tool_name} run {run_number} ---\n"));
+            raw_log.push_str(&run_log);
+            success = run_success;
+            if !run_success {
+                break;
+            }
+        }
         let duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
         let pdf_path = work_dir.join("main.pdf");
         let pdf_bytes = if success && pdf_path.is_file() {
-            Some(
-                fs::read(&pdf_path)
-                    .map_err(|error| format!("failed to read compiled PDF: {error}"))?,
-            )
+            Some(read_pdf_bytes(&pdf_path)?)
         } else {
             None
         };
@@ -715,7 +757,7 @@ pub fn run() {
 mod tests {
     use super::{
         detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection, get_runtime_info,
-        validated_project_path, StorageInfo, STORAGE_CONTRACT_VERSION,
+        read_capped_text_file, validated_project_path, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -779,6 +821,25 @@ mod tests {
         assert_eq!(info["rawLog"], "fixture");
         assert_eq!(info["errors"][0]["severity"], "error");
         assert_eq!(info["durationMs"], 12);
+    }
+
+    #[test]
+    fn compile_log_reader_truncates_large_output() {
+        let path = std::env::temp_dir().join(format!(
+            "texforge-large-log-{}-{}.log",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after unix epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&path, vec![b'a'; 1_000_010]).expect("large log should be written");
+
+        let log = read_capped_text_file(&path, "fixture log").expect("large log should be read");
+
+        assert!(log.contains("truncated compiler output"));
+        assert!(log.len() < 1_000_100);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

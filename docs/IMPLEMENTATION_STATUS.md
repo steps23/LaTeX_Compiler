@@ -47,6 +47,7 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                       |
 | Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                      |
 | Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable; no shell or arbitrary path is exposed  |
+| Compilation hardening                | verificato localmente | App-cache workspace, timeout, file-backed stdout/stderr, capped logs, PDF size cap and workspace cleanup are implemented    |
 
 ## Deferred Beyond Current State
 

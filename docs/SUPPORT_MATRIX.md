@@ -12,4 +12,4 @@ This matrix records evidence, not release support.
 
 CI run `28040181526` is evidence for source gates, native target checks and unsigned debug app/build compatibility only. It is not evidence for manual interaction, installed-app smoke, real TeX distribution presence, installer signing, notarization or updater behavior.
 
-Prompt 5 baseline adds local TeX runtime diagnostics only. CI covers fixture-based detection behavior across macOS, Windows and Linux, but does not yet verify real TeX distributions on Windows/Linux, does not select runtimes and does not compile locally.
+Prompt 5/6 baseline adds local TeX runtime diagnostics, selected-runtime persistence, per-project overrides and a bounded desktop local compile command. CI covers fixture-based detection and compile-command contract behavior across macOS, Windows and Linux, but does not yet verify real installed TeX distributions or real local compilation on Windows/Linux/macOS machines.
