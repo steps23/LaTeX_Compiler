@@ -23,6 +23,7 @@ const project: Project = {
     autoCompileDelayMs: 2000,
     fontSize: 14,
     texRuntimeId: null,
+    texCompileEngine: "auto",
   },
 };
 

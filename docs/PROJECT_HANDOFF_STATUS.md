@@ -37,8 +37,9 @@ Latest phase added: Prompt 6 local desktop compilation baseline — selected run
 - Rust detects allowlisted TeX tools from process `PATH` and known platform TeX directories without invoking a shell.
 - Global selected-runtime persistence is implemented through versioned browser local storage or Tauri app-data JSON.
 - Per-project runtime overrides are implemented in `ProjectSettings.texRuntimeId`; omitted means inherit global, `null` means disabled for that project, and a string means project-specific detected runtime ID.
+- Per-project compile engine selection is implemented in `ProjectSettings.texCompileEngine` with the allowlist `auto`, `latexmk`, `pdflatex`, `xelatex`, `lualatex`.
 - Tauri runtime selection accepts only currently detected runtime IDs; arbitrary executable paths remain deferred.
-- Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, rejects oversized input/file sets, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, uses file-backed stdout/stderr with capped log reads, reads size-capped `main.pdf` and removes the workspace.
+- Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, rejects oversized input/file sets, validates the project engine allowlist, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, uses file-backed stdout/stderr with capped log reads, reads size-capped `main.pdf` and removes the workspace.
 - Browser compilation continues to use the HTTP fallback compiler.
 - LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select/clear global runtime plus set project inherit/disable/override behavior when a project is open.
 
@@ -124,7 +125,7 @@ Evidence:
 
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml` passed.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` passed.
-- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 11 tests.
+- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 12 tests.
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed.
 
 ### Git State
@@ -133,16 +134,16 @@ Evidence:
 git status --short
 ```
 
-Result before this update: clean at `a1fcfcf9`.
+Result before this update: clean at `cc308883`.
 
 Current intended changes:
 
-- `src-tauri/src/lib.rs` adds `compile_latex_project`, bounded compile workspaces, explicit TeX process invocation, timeout/input/file/log/PDF caps, non-`latexmk` two-pass fallback and native compile result/limit tests.
+- `src-tauri/src/lib.rs` adds `compile_latex_project`, bounded compile workspaces, explicit TeX process invocation, engine allowlist validation, timeout/input/file/log/PDF caps, non-`latexmk` two-pass fallback and native compile result/limit tests.
 - `src/features/compiler/index.ts` selects native local compiler in Tauri and HTTP fallback in browser.
 - `src/features/compiler/NativeLocalCompiler.ts` adds the desktop compiler adapter.
 - `src/features/compiler/NativeLocalCompiler.test.ts` covers native compile IPC payloads and PDF byte hydration.
 - `src/components/Header.tsx` passes the current project to compiler resolution.
-- `src/types/index.ts` allows compiler adapters to receive optional project context.
+- `src/types/index.ts` allows compiler adapters to receive optional project context and defines `TexCompileEngine`.
 - `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the local desktop compilation baseline.
 
 ## External Documentation Checked
@@ -278,6 +279,7 @@ Already done:
 
 - Job workspace under app-managed cache directory.
 - Selected detected TeX executable only; no arbitrary compiler path.
+- Per-project compile engine selection.
 - Fixed compiler arguments, no shell, timeout and workspace cleanup.
 - File-backed compiler stdout/stderr, compile input/file caps, capped log reads and PDF size cap.
 - Two-pass fallback for direct `pdflatex`/`xelatex`/`lualatex` execution.

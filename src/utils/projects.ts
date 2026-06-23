@@ -90,6 +90,7 @@ export async function importProjectZip(file: File): Promise<string> {
       autoCompile: false,
       autoCompileDelayMs: 2000,
       fontSize: 14,
+      texCompileEngine: "auto",
     },
   };
 

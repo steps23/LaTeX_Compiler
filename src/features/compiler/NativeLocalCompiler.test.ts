@@ -61,6 +61,7 @@ describe("NativeLocalCompiler", () => {
           autoCompileDelayMs: 2000,
           fontSize: 14,
           texRuntimeId: "project-runtime",
+          texCompileEngine: "xelatex",
         },
       },
     );
@@ -69,6 +70,7 @@ describe("NativeLocalCompiler", () => {
       request: expect.objectContaining({
         mainPath: "main.tex",
         runtimeId: "project-runtime",
+        compileEngine: "xelatex",
         files: [expect.objectContaining({ path: "main.tex" })],
       }),
     });

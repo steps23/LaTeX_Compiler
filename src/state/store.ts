@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Project, FileNode, CompileResult } from "../types";
+import { Project, FileNode, CompileResult, TexCompileEngine } from "../types";
 import { ProjectService } from "../services/ProjectService";
 import { FileService } from "../services/FileService";
 import { schedule, flushProject, flushFile } from "../services/FileDebouncer";
@@ -43,6 +43,7 @@ export interface EditorState {
   duplicateProject: (projectId: string) => Promise<string>;
   setProjectMainFile: (filePath: string) => Promise<void>;
   setProjectTexRuntime: (runtimeId: string | null | undefined) => Promise<void>;
+  setProjectTexCompileEngine: (engine: TexCompileEngine) => Promise<void>;
 
   // File Actions
   setActiveFile: (fileId: string) => Promise<void>;
@@ -107,6 +108,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         autoCompile: false,
         autoCompileDelayMs: 2000,
         fontSize: 14,
+        texCompileEngine: "auto",
       },
     };
 
@@ -196,6 +198,7 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
         autoCompile: false,
         autoCompileDelayMs: 2000,
         fontSize: 14,
+        texCompileEngine: "auto",
       },
     };
 
@@ -360,6 +363,29 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
       settings: {
         ...currentProject.settings,
         texRuntimeId: runtimeId,
+      },
+    };
+    await ProjectService.saveProject(newProject);
+    set({
+      currentProject: newProject,
+      projects: [
+        ...projects.filter((project) => project.id !== newProject.id),
+        newProject,
+      ].sort((a, b) => b.updatedAt - a.updatedAt),
+    });
+  },
+
+  setProjectTexCompileEngine: async (engine: TexCompileEngine) => {
+    const { currentProject, projects } = get();
+    if (!currentProject) return;
+
+    const now = Date.now();
+    const newProject: Project = {
+      ...currentProject,
+      updatedAt: now,
+      settings: {
+        ...currentProject.settings,
+        texCompileEngine: engine,
       },
     };
     await ProjectService.saveProject(newProject);

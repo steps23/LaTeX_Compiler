@@ -69,6 +69,7 @@ struct CompileFilePayload {
 struct CompileLatexRequest {
     main_path: String,
     runtime_id: Option<String>,
+    compile_engine: Option<String>,
     files: Vec<CompileFilePayload>,
 }
 
@@ -312,7 +313,18 @@ fn write_compile_workspace(
     Ok(())
 }
 
-fn selected_compile_tool(runtime_id: &str) -> Result<(String, String, Vec<String>), String> {
+fn validate_compile_engine(engine: Option<&str>) -> Result<&str, String> {
+    match engine.unwrap_or("auto") {
+        "auto" | "latexmk" | "pdflatex" | "xelatex" | "lualatex" => Ok(engine.unwrap_or("auto")),
+        _ => Err("invalid TeX compile engine".into()),
+    }
+}
+
+fn selected_compile_tool(
+    runtime_id: &str,
+    compile_engine: Option<&str>,
+) -> Result<(String, String, Vec<String>), String> {
+    let compile_engine = validate_compile_engine(compile_engine)?;
     validate_id(runtime_id)?;
     let diagnostic = tex_runtime::detect_tex_runtimes();
     let runtime = diagnostic
@@ -329,20 +341,30 @@ fn selected_compile_tool(runtime_id: &str) -> Result<(String, String, Vec<String
             .map(|tool| tool.path.clone())
     };
 
-    if let Some(path) = available_path("latexmk") {
-        return Ok((
-            "latexmk".into(),
-            path,
-            vec![
-                "-pdf".into(),
-                "-interaction=nonstopmode".into(),
-                "-halt-on-error".into(),
-                "-file-line-error".into(),
-                request_safe_job_arg(),
-            ],
-        ));
+    if matches!(compile_engine, "auto" | "latexmk") {
+        if let Some(path) = available_path("latexmk") {
+            return Ok((
+                "latexmk".into(),
+                path,
+                vec![
+                    "-pdf".into(),
+                    "-interaction=nonstopmode".into(),
+                    "-halt-on-error".into(),
+                    "-file-line-error".into(),
+                    request_safe_job_arg(),
+                ],
+            ));
+        }
+        if compile_engine == "latexmk" {
+            return Err("selected TeX runtime does not provide latexmk".into());
+        }
     }
-    for name in ["pdflatex", "xelatex", "lualatex"] {
+    let engine_candidates: Vec<&str> = if compile_engine == "auto" {
+        vec!["pdflatex", "xelatex", "lualatex"]
+    } else {
+        vec![compile_engine]
+    };
+    for name in engine_candidates {
         if let Some(path) = available_path(name) {
             return Ok((
                 name.into(),
@@ -555,7 +577,8 @@ fn compile_latex_project(
     let work_dir = unique_compile_dir(&app)?;
     let result = (|| -> Result<NativeCompileResult, String> {
         write_compile_workspace(&work_dir, &request)?;
-        let (tool_name, tool_path, args) = selected_compile_tool(runtime_id)?;
+        let (tool_name, tool_path, args) =
+            selected_compile_tool(runtime_id, request.compile_engine.as_deref())?;
         let compile_runs = if tool_name == "latexmk" { 1 } else { 2 };
         let mut success = false;
         let mut raw_log = String::new();
@@ -780,8 +803,9 @@ pub fn run() {
 mod tests {
     use super::{
         detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection, get_runtime_info,
-        read_capped_text_file, validated_project_path, write_compile_workspace, CompileFilePayload,
-        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
+        read_capped_text_file, validate_compile_engine, validated_project_path,
+        write_compile_workspace, CompileFilePayload, CompileLatexRequest, StorageInfo,
+        STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -836,6 +860,13 @@ mod tests {
     }
 
     #[test]
+    fn compile_engine_validation_allows_only_known_engines() {
+        assert_eq!(validate_compile_engine(None).unwrap(), "auto");
+        assert_eq!(validate_compile_engine(Some("xelatex")).unwrap(), "xelatex");
+        assert!(validate_compile_engine(Some("sh")).is_err());
+    }
+
+    #[test]
     fn native_compile_result_uses_the_frontend_contract() {
         let info = serde_json::to_value(empty_compile_error("fixture", 12))
             .expect("native compile result should be serializable");
@@ -874,6 +905,7 @@ mod tests {
         let request = CompileLatexRequest {
             main_path: "main.tex".into(),
             runtime_id: None,
+            compile_engine: Some("auto".into()),
             files,
         };
 

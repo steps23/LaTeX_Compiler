@@ -36,19 +36,19 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 
 ## Prompt 5 Baseline
 
-| Area                                 | Stato                 | Evidence                                                                                                                    |
-| ------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| TeX runtime diagnostic contract v1   | verificato localmente | TypeScript validation tests and Rust serialization test                                                                     |
-| Bounded TeX tool detection           | verificato localmente | Rust tests cover absent runtime and fixture binaries; no shell is invoked                                                   |
-| TeX Environment UI                   | verificato localmente | Frontend typecheck, lint, tests and build pass; route available at `#/tex-environment`                                      |
-| MacTeX / TeX Live / MiKTeX detection | verificato in CI      | Detection code and fixture tests pass on macOS, Windows and Linux CI; real installed distributions are still not verified   |
-| Runtime selection                    | verificato localmente | Global selection persists in browser local storage or Tauri app-data JSON; only currently detected runtime IDs are accepted |
-| Per-project runtime settings         | verificato localmente | Projects can inherit global selection, override it with a detected runtime ID, or explicitly disable local runtime usage    |
-| Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                       |
-| Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                      |
-| Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable; no shell or arbitrary path is exposed  |
-| Compilation hardening                | verificato localmente | App-cache workspace, timeout, input/file/log/PDF caps, file-backed stdout/stderr and workspace cleanup are implemented      |
-| macOS local TeX CLI smoke            | verificato localmente | MacTeX/TeX Live 2025 `latexmk` and `pdflatex` are present; fixture CLI compile produced a PDF locally                       |
+| Area                                 | Stato                 | Evidence                                                                                                                                  |
+| ------------------------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| TeX runtime diagnostic contract v1   | verificato localmente | TypeScript validation tests and Rust serialization test                                                                                   |
+| Bounded TeX tool detection           | verificato localmente | Rust tests cover absent runtime and fixture binaries; no shell is invoked                                                                 |
+| TeX Environment UI                   | verificato localmente | Frontend typecheck, lint, tests and build pass; route available at `#/tex-environment`                                                    |
+| MacTeX / TeX Live / MiKTeX detection | verificato in CI      | Detection code and fixture tests pass on macOS, Windows and Linux CI; real installed distributions are still not verified                 |
+| Runtime selection                    | verificato localmente | Global selection persists in browser local storage or Tauri app-data JSON; only currently detected runtime IDs are accepted               |
+| Per-project runtime settings         | verificato localmente | Projects can inherit global selection, override it with a detected runtime ID, explicitly disable runtime usage and choose compile engine |
+| Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                                     |
+| Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                                    |
+| Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable/engine; no shell or arbitrary path is exposed         |
+| Compilation hardening                | verificato localmente | App-cache workspace, timeout, input/file/log/PDF caps, file-backed stdout/stderr and workspace cleanup are implemented                    |
+| macOS local TeX CLI smoke            | verificato localmente | MacTeX/TeX Live 2025 `latexmk` and `pdflatex` are present; fixture CLI compile produced a PDF locally                                     |
 
 ## Deferred Beyond Current State
 

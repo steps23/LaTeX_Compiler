@@ -46,6 +46,7 @@ export class NativeLocalCompiler implements LatexCompiler {
       request: {
         mainPath,
         runtimeId,
+        compileEngine: project?.settings.texCompileEngine ?? "auto",
         files: nativeFiles,
       },
     });

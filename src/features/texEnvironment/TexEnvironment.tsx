@@ -19,6 +19,7 @@ import {
   TexRuntimeSelection,
 } from "../../utils/texRuntime";
 import { useEditorStore } from "../../state/store";
+import type { TexCompileEngine } from "../../types";
 
 const docs = [
   ["TeX Live", "https://tug.org/texlive/"],
@@ -27,9 +28,21 @@ const docs = [
   ["latexmk", "https://ctan.org/pkg/latexmk"],
 ];
 
+const compileEngines: { value: TexCompileEngine; label: string }[] = [
+  { value: "auto", label: "Auto (latexmk preferred)" },
+  { value: "latexmk", label: "latexmk" },
+  { value: "pdflatex", label: "pdfLaTeX" },
+  { value: "xelatex", label: "XeLaTeX" },
+  { value: "lualatex", label: "LuaLaTeX" },
+];
+
 export function TexEnvironment() {
-  const { currentProject, loadInitialState, setProjectTexRuntime } =
-    useEditorStore();
+  const {
+    currentProject,
+    loadInitialState,
+    setProjectTexRuntime,
+    setProjectTexCompileEngine,
+  } = useEditorStore();
   const [diagnostic, setDiagnostic] = useState<TexRuntimeDiagnostic | null>(
     null,
   );
@@ -205,6 +218,10 @@ export function TexEnvironment() {
                 <p className="text-sm text-zinc-400 mt-1">
                   Effective runtime: {effectiveRuntime?.distribution ?? "none"}
                 </p>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Project engine:{" "}
+                  {currentProject?.settings.texCompileEngine ?? "auto"}
+                </p>
               </div>
               <div
                 className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full ${
@@ -240,6 +257,27 @@ export function TexEnvironment() {
                 Saved project runtime is no longer detected. Choose a detected
                 runtime for this project or clear the project override.
               </div>
+            ) : null}
+
+            {currentProject ? (
+              <label className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-zinc-300">
+                <span className="text-zinc-400">Project compile engine</span>
+                <select
+                  value={currentProject.settings.texCompileEngine ?? "auto"}
+                  onChange={(event) =>
+                    void setProjectTexCompileEngine(
+                      event.target.value as TexCompileEngine,
+                    )
+                  }
+                  className="bg-zinc-950 border border-zinc-700 text-zinc-100 rounded-md px-3 py-1.5"
+                >
+                  {compileEngines.map((engine) => (
+                    <option key={engine.value} value={engine.value}>
+                      {engine.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">

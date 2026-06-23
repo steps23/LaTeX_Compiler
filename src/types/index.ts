@@ -21,12 +21,20 @@ export type Project = {
   isDeleted?: boolean;
 };
 
+export type TexCompileEngine =
+  | "auto"
+  | "latexmk"
+  | "pdflatex"
+  | "xelatex"
+  | "lualatex";
+
 export type ProjectSettings = {
   compiler: "wasm" | "server" | "http-fallback";
   autoCompile: boolean;
   autoCompileDelayMs: number;
   fontSize: number;
   texRuntimeId?: string | null;
+  texCompileEngine?: TexCompileEngine;
 };
 
 export type FileNode = {
