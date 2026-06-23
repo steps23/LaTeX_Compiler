@@ -47,7 +47,8 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                       |
 | Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                      |
 | Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable; no shell or arbitrary path is exposed  |
-| Compilation hardening                | verificato localmente | App-cache workspace, timeout, file-backed stdout/stderr, capped logs, PDF size cap and workspace cleanup are implemented    |
+| Compilation hardening                | verificato localmente | App-cache workspace, timeout, input/file/log/PDF caps, file-backed stdout/stderr and workspace cleanup are implemented      |
+| macOS local TeX CLI smoke            | verificato localmente | MacTeX/TeX Live 2025 `latexmk` and `pdflatex` are present; fixture CLI compile produced a PDF locally                       |
 
 ## Deferred Beyond Current State
 
@@ -56,4 +57,4 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 - SyncTeX, texlab/LSP, collaboration and Git.
 - Security audit, packaging, signing, installers and updater.
 
-The remote HTTP compiler remains active for browser builds. Desktop local compilation is implemented but still needs real-machine verification across Windows, Linux and macOS before any operating system is declared release-supported.
+The remote HTTP compiler remains active for browser builds. Desktop local compilation is implemented; local macOS TeX CLI smoke passed, but installed-app compile smoke and real-machine verification across Windows/Linux remain required before any operating system is declared release-supported.

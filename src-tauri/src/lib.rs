@@ -22,6 +22,8 @@ const TEX_RUNTIME_SELECTION_FILE: &str = "tex-runtime-selection.json";
 const COMPILE_WORK_DIR: &str = "compile-workspaces";
 const COMPILE_TIMEOUT: Duration = Duration::from_secs(45);
 const MAX_COMPILE_LOG_BYTES: u64 = 1_000_000;
+const MAX_COMPILE_INPUT_BYTES: u64 = 200 * 1024 * 1024;
+const MAX_COMPILE_FILES: usize = 5_000;
 const MAX_PDF_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
@@ -260,6 +262,8 @@ fn write_compile_workspace(
 ) -> Result<(), String> {
     let main_path = validated_project_path(&request.main_path)?;
     let mut has_main_file = false;
+    let mut written_files = 0usize;
+    let mut total_input_bytes = 0u64;
 
     for file in &request.files {
         if file.is_folder || file.is_deleted.unwrap_or(false) {
@@ -269,6 +273,25 @@ fn write_compile_workspace(
         if relative_path == main_path {
             has_main_file = true;
         }
+        written_files += 1;
+        if written_files > MAX_COMPILE_FILES {
+            return Err(format!(
+                "project exceeds maximum compile file count of {MAX_COMPILE_FILES}"
+            ));
+        }
+        let input_size = file
+            .content
+            .as_ref()
+            .map(|content| content.len() as u64)
+            .or_else(|| file.binary_bytes.as_ref().map(|bytes| bytes.len() as u64))
+            .unwrap_or(0);
+        total_input_bytes = total_input_bytes.saturating_add(input_size);
+        if total_input_bytes > MAX_COMPILE_INPUT_BYTES {
+            return Err(format!(
+                "project exceeds maximum compile input size of {MAX_COMPILE_INPUT_BYTES} bytes"
+            ));
+        }
+
         let disk_path = work_dir.join(relative_path);
         if let Some(parent) = disk_path.parent() {
             fs::create_dir_all(parent)
@@ -757,7 +780,8 @@ pub fn run() {
 mod tests {
     use super::{
         detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection, get_runtime_info,
-        read_capped_text_file, validated_project_path, StorageInfo, STORAGE_CONTRACT_VERSION,
+        read_capped_text_file, validated_project_path, write_compile_workspace, CompileFilePayload,
+        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -821,6 +845,43 @@ mod tests {
         assert_eq!(info["rawLog"], "fixture");
         assert_eq!(info["errors"][0]["severity"], "error");
         assert_eq!(info["durationMs"], 12);
+    }
+
+    #[test]
+    fn compile_workspace_rejects_too_many_files() {
+        let work_dir = std::env::temp_dir().join(format!(
+            "texforge-compile-limit-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after unix epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&work_dir).expect("compile limit dir should be created");
+        let files = (0..=super::MAX_COMPILE_FILES)
+            .map(|index| CompileFilePayload {
+                path: if index == 0 {
+                    "main.tex".into()
+                } else {
+                    format!("file-{index}.tex")
+                },
+                is_folder: false,
+                content: Some("fixture".into()),
+                binary_bytes: None,
+                is_deleted: None,
+            })
+            .collect();
+        let request = CompileLatexRequest {
+            main_path: "main.tex".into(),
+            runtime_id: None,
+            files,
+        };
+
+        let error =
+            write_compile_workspace(&work_dir, &request).expect_err("file limit should fail");
+
+        assert!(error.contains("maximum compile file count"));
+        let _ = std::fs::remove_dir_all(work_dir);
     }
 
     #[test]
