@@ -11,7 +11,7 @@ TeXForge is a React 19/Vite LaTeX editor with a Tauri 2 desktop foundation. The 
 - Tauri restores window position, size and maximized state through the official window-state plugin.
 - Filesystem, shell, dialog, opener and process capabilities are not granted in this phase.
 - A LaTeX Environment screen detects and selects existing TeX Live, MacTeX or MiKTeX tools from bounded Rust code without invoking a shell, accepting arbitrary executable paths or modifying system installations.
-- Desktop builds can compile with the selected local TeX runtime and per-project engine selection through bounded Tauri commands; browser builds continue to use the HTTP fallback compiler.
+- Desktop builds can compile/cancel jobs with the selected local TeX runtime and per-project engine selection through bounded Tauri commands; browser builds continue to use the HTTP fallback compiler.
 
 See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) and [Support Matrix](docs/SUPPORT_MATRIX.md) for evidence levels. A configured CI job is not an installed-app or real-machine test.
 

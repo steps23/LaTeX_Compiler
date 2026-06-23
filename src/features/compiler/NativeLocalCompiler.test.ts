@@ -24,6 +24,9 @@ describe("NativeLocalCompiler", () => {
   });
 
   test("sends project files and effective runtime to native compiler", async () => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(
+      "00000000-0000-4000-8000-000000000001",
+    );
     invokeMock.mockResolvedValue({
       success: true,
       pdfBytes: [37, 80, 68, 70],
@@ -68,6 +71,7 @@ describe("NativeLocalCompiler", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("compile_latex_project", {
       request: expect.objectContaining({
+        jobId: "00000000-0000-4000-8000-000000000001",
         mainPath: "main.tex",
         runtimeId: "project-runtime",
         compileEngine: "xelatex",
@@ -76,5 +80,55 @@ describe("NativeLocalCompiler", () => {
     });
     expect(result.pdfBytes).toBeInstanceOf(Uint8Array);
     expect(Array.from(result.pdfBytes ?? [])).toEqual([37, 80, 68, 70]);
+  });
+
+  test("cancels the active native compile job", async () => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(
+      "00000000-0000-4000-8000-000000000002",
+    );
+    let resolveCompile!: (value: unknown) => void;
+    invokeMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCompile = resolve;
+      }),
+    );
+
+    const compiler = new NativeLocalCompiler();
+    const compilePromise = compiler.compile(
+      [
+        {
+          id: "file-1",
+          projectId: "project-1",
+          path: "main.tex",
+          name: "main.tex",
+          isFolder: false,
+          content: "\\documentclass{article}",
+          updatedAt: 1,
+        },
+      ],
+      "main.tex",
+      null,
+    );
+
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith(
+        "compile_latex_project",
+        expect.any(Object),
+      ),
+    );
+
+    compiler.cancel();
+
+    expect(invokeMock).toHaveBeenLastCalledWith("cancel_latex_compile", {
+      jobId: "00000000-0000-4000-8000-000000000002",
+    });
+    resolveCompile({
+      success: false,
+      rawLog: "cancelled",
+      errors: [],
+      warnings: [],
+      durationMs: 1,
+    });
+    await compilePromise;
   });
 });

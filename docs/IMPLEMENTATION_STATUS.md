@@ -47,7 +47,7 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                                     |
 | Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                                    |
 | Local compilation                    | verificato localmente | Desktop adapter and native command compile through selected detected TeX executable/engine; no shell or arbitrary path is exposed         |
-| Compilation hardening                | verificato localmente | App-cache workspace, timeout, input/file/log/PDF caps, file-backed stdout/stderr and workspace cleanup are implemented                    |
+| Compilation hardening                | verificato localmente | App-cache workspace, timeout/cancellation, input/file/log/PDF caps, file-backed stdout/stderr and cleanup are implemented                 |
 | macOS local TeX CLI smoke            | verificato localmente | MacTeX/TeX Live 2025 `latexmk` and `pdflatex` are present; fixture CLI compile produced a PDF locally                                     |
 
 ## Deferred Beyond Current State

@@ -35,7 +35,12 @@ export function Header() {
   }, [isEditingTitle]);
 
   const handleCompile = async () => {
-    if (!currentProject || isCompiling) return;
+    if (!currentProject) return;
+    if (isCompiling) {
+      const compiler = await getCompiler();
+      compiler.cancel();
+      return;
+    }
 
     setCompiling(true);
     try {
@@ -140,7 +145,7 @@ export function Header() {
         </button>
         <button
           onClick={handleCompile}
-          disabled={isCompiling || !currentProject}
+          disabled={!currentProject}
           className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white px-4 py-1.5 rounded-sm font-medium flex items-center gap-2 transition-colors text-sm"
         >
           {isCompiling ? (
@@ -148,7 +153,7 @@ export function Header() {
           ) : (
             <Play className="w-4 h-4" />
           )}
-          Compile
+          {isCompiling ? "Cancel" : "Compile"}
         </button>
         <button
           onClick={toggleLogs}

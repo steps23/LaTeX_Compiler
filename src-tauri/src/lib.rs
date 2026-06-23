@@ -3,9 +3,11 @@ mod tex_runtime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    collections::BTreeSet,
     fs,
     path::PathBuf,
     process::{Command, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -54,6 +56,11 @@ struct TexRuntimeSelection {
     updated_at: Option<u64>,
 }
 
+#[derive(Debug, Default)]
+struct CompileJobRegistry {
+    cancelled_jobs: Mutex<BTreeSet<String>>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CompileFilePayload {
@@ -67,6 +74,7 @@ struct CompileFilePayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CompileLatexRequest {
+    job_id: String,
     main_path: String,
     runtime_id: Option<String>,
     compile_engine: Option<String>,
@@ -188,6 +196,43 @@ fn empty_tex_runtime_selection() -> TexRuntimeSelection {
         selected_bin_dir: None,
         updated_at: None,
     }
+}
+
+fn mark_compile_job_started(registry: &CompileJobRegistry, job_id: &str) -> Result<(), String> {
+    validate_id(job_id)?;
+    let mut cancelled_jobs = registry
+        .cancelled_jobs
+        .lock()
+        .map_err(|_| "failed to lock compile job registry".to_string())?;
+    cancelled_jobs.remove(job_id);
+    Ok(())
+}
+
+fn mark_compile_job_cancelled(registry: &CompileJobRegistry, job_id: &str) -> Result<(), String> {
+    validate_id(job_id)?;
+    let mut cancelled_jobs = registry
+        .cancelled_jobs
+        .lock()
+        .map_err(|_| "failed to lock compile job registry".to_string())?;
+    cancelled_jobs.insert(job_id.to_string());
+    Ok(())
+}
+
+fn clear_compile_job(registry: &CompileJobRegistry, job_id: &str) -> Result<(), String> {
+    let mut cancelled_jobs = registry
+        .cancelled_jobs
+        .lock()
+        .map_err(|_| "failed to lock compile job registry".to_string())?;
+    cancelled_jobs.remove(job_id);
+    Ok(())
+}
+
+fn is_compile_job_cancelled(registry: &CompileJobRegistry, job_id: &str) -> Result<bool, String> {
+    let cancelled_jobs = registry
+        .cancelled_jobs
+        .lock()
+        .map_err(|_| "failed to lock compile job registry".to_string())?;
+    Ok(cancelled_jobs.contains(job_id))
 }
 
 fn build_tex_runtime_selection(runtime_id: Option<String>) -> Result<TexRuntimeSelection, String> {
@@ -418,6 +463,8 @@ fn run_compile_process(
     main_path: &str,
     work_dir: &std::path::Path,
     run_number: usize,
+    registry: &CompileJobRegistry,
+    job_id: &str,
 ) -> Result<(bool, String), String> {
     let main_path = validated_project_path(main_path)?;
     let stdout_path = work_dir.join(format!("texforge-stdout-{run_number}.log"));
@@ -439,6 +486,12 @@ fn run_compile_process(
 
     let start = Instant::now();
     loop {
+        if is_compile_job_cancelled(registry, job_id)? {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("local TeX compilation cancelled".into());
+        }
+
         match child.try_wait() {
             Ok(Some(status)) => {
                 let _ = child.wait();
@@ -564,9 +617,11 @@ fn save_tex_runtime_selection(
 #[tauri::command]
 fn compile_latex_project(
     app: tauri::AppHandle,
+    registry: tauri::State<CompileJobRegistry>,
     request: CompileLatexRequest,
 ) -> Result<NativeCompileResult, String> {
     let start = Instant::now();
+    mark_compile_job_started(&registry, &request.job_id)?;
     let Some(runtime_id) = request.runtime_id.as_deref() else {
         return Ok(empty_compile_error(
             "No TeX runtime selected. Open LaTeX Environment and choose a runtime before compiling locally.",
@@ -583,8 +638,15 @@ fn compile_latex_project(
         let mut success = false;
         let mut raw_log = String::new();
         for run_number in 1..=compile_runs {
-            let (run_success, run_log) =
-                run_compile_process(&tool_path, &args, &request.main_path, &work_dir, run_number)?;
+            let (run_success, run_log) = run_compile_process(
+                &tool_path,
+                &args,
+                &request.main_path,
+                &work_dir,
+                run_number,
+                &registry,
+                &request.job_id,
+            )?;
             raw_log.push_str(&format!("\n--- {tool_name} run {run_number} ---\n"));
             raw_log.push_str(&run_log);
             success = run_success;
@@ -623,6 +685,7 @@ fn compile_latex_project(
     })();
 
     let _ = fs::remove_dir_all(&work_dir);
+    let _ = clear_compile_job(&registry, &request.job_id);
 
     match result {
         Ok(result) => Ok(result),
@@ -631,6 +694,14 @@ fn compile_latex_project(
             start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
         )),
     }
+}
+
+#[tauri::command]
+fn cancel_latex_compile(
+    registry: tauri::State<CompileJobRegistry>,
+    job_id: String,
+) -> Result<(), String> {
+    mark_compile_job_cancelled(&registry, &job_id)
 }
 
 #[tauri::command]
@@ -778,6 +849,7 @@ fn delete_file(app: tauri::AppHandle, id: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(CompileJobRegistry::default())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,
@@ -786,6 +858,7 @@ pub fn run() {
             get_tex_runtime_selection,
             save_tex_runtime_selection,
             compile_latex_project,
+            cancel_latex_compile,
             get_all_projects,
             get_project,
             save_project,
@@ -802,10 +875,11 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection, get_runtime_info,
-        read_capped_text_file, validate_compile_engine, validated_project_path,
-        write_compile_workspace, CompileFilePayload, CompileLatexRequest, StorageInfo,
-        STORAGE_CONTRACT_VERSION,
+        clear_compile_job, detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection,
+        get_runtime_info, is_compile_job_cancelled, mark_compile_job_cancelled,
+        mark_compile_job_started, read_capped_text_file, validate_compile_engine,
+        validated_project_path, write_compile_workspace, CompileFilePayload, CompileJobRegistry,
+        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -860,6 +934,18 @@ mod tests {
     }
 
     #[test]
+    fn compile_job_registry_tracks_cancellation() {
+        let registry = CompileJobRegistry::default();
+
+        mark_compile_job_started(&registry, "job-1").unwrap();
+        assert!(!is_compile_job_cancelled(&registry, "job-1").unwrap());
+        mark_compile_job_cancelled(&registry, "job-1").unwrap();
+        assert!(is_compile_job_cancelled(&registry, "job-1").unwrap());
+        clear_compile_job(&registry, "job-1").unwrap();
+        assert!(!is_compile_job_cancelled(&registry, "job-1").unwrap());
+    }
+
+    #[test]
     fn compile_engine_validation_allows_only_known_engines() {
         assert_eq!(validate_compile_engine(None).unwrap(), "auto");
         assert_eq!(validate_compile_engine(Some("xelatex")).unwrap(), "xelatex");
@@ -903,6 +989,7 @@ mod tests {
             })
             .collect();
         let request = CompileLatexRequest {
+            job_id: "job-1".into(),
             main_path: "main.tex".into(),
             runtime_id: None,
             compile_engine: Some("auto".into()),
