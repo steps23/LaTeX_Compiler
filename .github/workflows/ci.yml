@@ -110,4 +110,9 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
 
       - name: Tauri unsigned debug build
+        if: runner.os != 'macOS'
         run: npm run tauri:build -- --debug --target ${{ matrix.target }}
+
+      - name: Tauri unsigned macOS app build
+        if: runner.os == 'macOS'
+        run: npm run tauri:build -- --debug --target ${{ matrix.target }} --bundles app
