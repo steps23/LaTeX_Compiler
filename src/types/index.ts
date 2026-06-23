@@ -26,6 +26,7 @@ export type ProjectSettings = {
   autoCompile: boolean;
   autoCompileDelayMs: number;
   fontSize: number;
+  texRuntimeId?: string | null;
 };
 
 export type FileNode = {

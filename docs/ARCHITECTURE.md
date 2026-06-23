@@ -13,7 +13,7 @@ Desktop startup does not depend on `server.ts` or Express. `HashRouter` keeps da
 
 `src/utils/storage.ts` is the storage capability introspection boundary. Browser mode reports IndexedDB. Tauri mode calls `get_storage_info`, validates a versioned IPC payload, and resolves an app-owned project storage root under the platform app data directory.
 
-`src/utils/texRuntime.ts` is the TeX runtime diagnostic and selection boundary. Browser mode returns a non-native diagnostic and persists selection in local storage for UI parity. Tauri mode calls `detect_tex_runtimes`, `get_tex_runtime_selection` and `save_tex_runtime_selection`, validates contract version 1, and exposes detected TeX Live, MacTeX or MiKTeX tools to the LaTeX Environment screen without exposing shell execution to the frontend. Runtime selection accepts only a currently detected runtime ID; arbitrary executable paths remain deferred.
+`src/utils/texRuntime.ts` is the TeX runtime diagnostic and selection boundary. Browser mode returns a non-native diagnostic and persists global selection in local storage for UI parity. Tauri mode calls `detect_tex_runtimes`, `get_tex_runtime_selection` and `save_tex_runtime_selection`, validates contract version 1, and exposes detected TeX Live, MacTeX or MiKTeX tools to the LaTeX Environment screen without exposing shell execution to the frontend. Runtime selection accepts only a currently detected runtime ID; arbitrary executable paths remain deferred. Projects can optionally override the global runtime by storing a selected runtime ID in `ProjectSettings.texRuntimeId`; omitted means inherit global, `null` means disabled for that project.
 
 `src/db/repository.ts` selects the persistence adapter at runtime: browser mode uses IndexedDB, while Tauri mode uses `src/db/nativeRepository.ts`. The native adapter calls typed IPC commands for projects and files. Rust stores project metadata as JSON, file metadata in a manifest, and project files under the app-owned `projects/<project-id>/files` tree.
 
@@ -33,6 +33,6 @@ The main capability grants only `core:default`. Production CSP allows bundled re
 - `src/features/editor`: local Monaco workers.
 - `src/features/pdfViewer`: local PDF.js worker.
 - `src/features/compiler`: HTTP fallback compiler, still remote in this phase.
-- `src/features/texEnvironment`: desktop diagnostics and global selection for existing local TeX tools, not local compilation.
+- `src/features/texEnvironment`: desktop diagnostics, global selection and per-project overrides for existing local TeX tools, not local compilation.
 
 WKWebView, WebView2 and WebKitGTK consume the same bundled UI and CSP. Native build jobs exercise configuration compatibility; they do not prove manual interaction or installed-app behavior.

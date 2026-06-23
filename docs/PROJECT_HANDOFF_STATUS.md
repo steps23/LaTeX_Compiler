@@ -11,7 +11,7 @@ The repository source files are aligned with the `texforge-prompt-03` reference 
 
 Status: `verificato in CI`
 
-Latest phase added: Prompt 5 runtime selection baseline — global selected-runtime persistence.
+Latest phase added: Prompt 5 runtime selection baseline — global selected-runtime persistence plus per-project overrides.
 
 ## What Has Been Done
 
@@ -36,8 +36,9 @@ Latest phase added: Prompt 5 runtime selection baseline — global selected-runt
 - Local TeX runtime diagnostic contract v1 is implemented.
 - Rust detects allowlisted TeX tools from process `PATH` and known platform TeX directories without invoking a shell.
 - Global selected-runtime persistence is implemented through versioned browser local storage or Tauri app-data JSON.
+- Per-project runtime overrides are implemented in `ProjectSettings.texRuntimeId`; omitted means inherit global, `null` means disabled for that project, and a string means project-specific detected runtime ID.
 - Tauri runtime selection accepts only currently detected runtime IDs; arbitrary executable paths remain deferred.
-- LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select or clear a detected runtime.
+- LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select/clear global runtime plus set project inherit/disable/override behavior when a project is open.
 
 ## Latest Verification
 
@@ -74,7 +75,7 @@ Result: passed.
 
 Evidence:
 
-- Vitest: 1 file, 7 tests passed.
+- Vitest: 1 file, 8 tests passed.
 - Rust targeted test passed.
 
 ### Frontend Gate
@@ -90,7 +91,7 @@ Evidence:
 - Prettier format check passed.
 - TypeScript typecheck passed.
 - ESLint passed.
-- Vitest passed: 16 test files, 61 tests.
+- Vitest passed: 16 test files, 62 tests.
 - Vite/web build passed.
 - Server bundle build passed.
 
@@ -130,15 +131,17 @@ Evidence:
 git status --short
 ```
 
-Result before this update: clean at `b019d280`.
+Result before this update: clean at `0889900c`.
 
 Current intended changes:
 
 - `src-tauri/src/lib.rs` adds versioned selected-runtime persistence in app-data JSON.
 - `src-tauri/src/tex_runtime.rs` fixes flaky test temp directory naming.
-- `src/utils/texRuntime.ts` adds the selection contract and browser/Tauri adapters.
-- `src/features/texEnvironment/TexEnvironment.tsx` adds select and clear actions.
-- `src/utils/texRuntime.test.ts` covers selection validation and persistence.
+- `src/types/index.ts` adds optional `ProjectSettings.texRuntimeId`.
+- `src/state/store.ts` adds project runtime override persistence.
+- `src/utils/texRuntime.ts` adds the selection contract, browser/Tauri adapters and effective runtime resolver.
+- `src/features/texEnvironment/TexEnvironment.tsx` adds global select/clear and project inherit/disable/override actions.
+- `src/utils/texRuntime.test.ts` covers selection validation, persistence and effective runtime resolution.
 - `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the runtime selection baseline.
 
 ## External Documentation Checked
@@ -184,7 +187,6 @@ Relevant alignment:
 
 The app is not yet a fully offline production desktop LaTeX editor. Deferred or incomplete areas:
 
-- Per-project TeX runtime settings.
 - Custom authorized runtime paths.
 - Real distribution verification on Windows/Linux and installed-app smoke tests.
 - Offline/local LaTeX compilation.
@@ -245,16 +247,16 @@ PATH="$HOME/.cargo/bin:$PATH" npm run cargo:check
 
 ### Option A — Complete Prompt 5 Runtime Selection
 
-Goal: extend the current global selected-runtime baseline into full runtime selection.
+Goal: extend the current selected-runtime baseline into full runtime selection.
 
 Already done:
 
 - Persistent global runtime selection settings.
+- Per-project inherit/disable/override settings.
 - Selection limited to currently detected runtime IDs.
 
 Likely remaining scope:
 
-- Per-project TeX runtime selection.
 - Custom authorized runtime paths.
 - Better architecture/version compatibility checks.
 - Diagnostic export with home/user redaction.

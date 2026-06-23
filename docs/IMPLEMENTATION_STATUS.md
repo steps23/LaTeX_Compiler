@@ -43,7 +43,7 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | TeX Environment UI                   | verificato localmente | Frontend typecheck, lint, tests and build pass; route available at `#/tex-environment`                                      |
 | MacTeX / TeX Live / MiKTeX detection | verificato in CI      | Detection code and fixture tests pass on macOS, Windows and Linux CI; real installed distributions are still not verified   |
 | Runtime selection                    | verificato localmente | Global selection persists in browser local storage or Tauri app-data JSON; only currently detected runtime IDs are accepted |
-| Per-project runtime settings         | non verificato        | Deferred; current selection is global only                                                                                  |
+| Per-project runtime settings         | verificato localmente | Projects can inherit global selection, override it with a detected runtime ID, or explicitly disable local runtime usage    |
 | Custom runtime paths                 | non verificato        | Deferred; arbitrary executable paths are not accepted                                                                       |
 | Package management                   | non verificato        | Deferred; no `tlmgr`/`mpm` mutations or installation flows implemented                                                      |
 | Local compilation                    | non verificato        | Deferred to Prompt 6; remote HTTP compiler fallback remains active                                                          |
@@ -51,7 +51,6 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 ## Deferred Beyond Current State
 
 - SQLite metadata storage.
-- Per-project TeX runtime settings.
 - Custom authorized runtime paths.
 - Local TeX compilation.
 - SyncTeX, texlab/LSP, collaboration and Git.

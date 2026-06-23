@@ -12,11 +12,13 @@ import {
 import {
   detectTexRuntimes,
   getTexRuntimeSelection,
+  resolveEffectiveTexRuntimeId,
   saveTexRuntimeSelection,
   TexRuntime,
   TexRuntimeDiagnostic,
   TexRuntimeSelection,
 } from "../../utils/texRuntime";
+import { useEditorStore } from "../../state/store";
 
 const docs = [
   ["TeX Live", "https://tug.org/texlive/"],
@@ -26,12 +28,17 @@ const docs = [
 ];
 
 export function TexEnvironment() {
+  const { currentProject, loadInitialState, setProjectTexRuntime } =
+    useEditorStore();
   const [diagnostic, setDiagnostic] = useState<TexRuntimeDiagnostic | null>(
     null,
   );
   const [selection, setSelection] = useState<TexRuntimeSelection | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingRuntimeId, setSavingRuntimeId] = useState<string | null>(null);
+  const [savingProjectRuntimeId, setSavingProjectRuntimeId] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -63,6 +70,26 @@ export function TexEnvironment() {
     }
   };
 
+  const selectProjectRuntime = async (
+    runtime: TexRuntime | null | undefined,
+  ) => {
+    setSavingProjectRuntimeId(
+      runtime === undefined
+        ? "__project_inherit__"
+        : (runtime?.id ?? "__project_disable__"),
+    );
+    setError(null);
+    try {
+      await setProjectTexRuntime(
+        runtime === undefined ? undefined : (runtime?.id ?? null),
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingProjectRuntimeId(null);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -87,16 +114,27 @@ export function TexEnvironment() {
       }
     };
 
+    void loadInitialState();
     void detectInitial();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadInitialState]);
 
   const hasRuntime = (diagnostic?.runtimes.length ?? 0) > 0;
+  const effectiveRuntimeId = resolveEffectiveTexRuntimeId(
+    currentProject,
+    selection,
+  );
   const selectedRuntime = diagnostic?.runtimes.find(
     (runtime) => runtime.id === selection?.selectedRuntimeId,
+  );
+  const projectRuntime = diagnostic?.runtimes.find(
+    (runtime) => runtime.id === currentProject?.settings.texRuntimeId,
+  );
+  const effectiveRuntime = diagnostic?.runtimes.find(
+    (runtime) => runtime.id === effectiveRuntimeId,
   );
 
   return (
@@ -152,10 +190,20 @@ export function TexEnvironment() {
                   {diagnostic?.hostArch ?? "detecting"}
                 </p>
                 <p className="text-sm text-zinc-400 mt-1">
-                  Selected runtime: {selectedRuntime?.distribution ?? "none"}
+                  Global runtime: {selectedRuntime?.distribution ?? "none"}
                   {selection?.selectedBinDir
                     ? ` · ${selection.selectedBinDir}`
                     : ""}
+                </p>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Project runtime: {currentProject?.name ?? "no project open"} ·{" "}
+                  {projectRuntime?.distribution ??
+                    (currentProject?.settings.texRuntimeId === null
+                      ? "disabled"
+                      : "inherits global")}
+                </p>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Effective runtime: {effectiveRuntime?.distribution ?? "none"}
                 </p>
               </div>
               <div
@@ -182,22 +230,53 @@ export function TexEnvironment() {
 
             {selection?.selectedRuntimeId && !selectedRuntime ? (
               <div className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-900/60 rounded-md p-3">
-                Saved runtime is no longer detected. Choose a detected runtime
-                or clear the selection.
+                Saved global runtime is no longer detected. Choose a detected
+                runtime or clear the selection.
               </div>
             ) : null}
 
-            {selection?.selectedRuntimeId ? (
-              <button
-                onClick={() => void selectRuntime(null)}
-                disabled={savingRuntimeId === "__clear__"}
-                className="mt-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 px-3 py-1.5 rounded-md text-sm border border-zinc-700"
-              >
-                {savingRuntimeId === "__clear__"
-                  ? "Clearing…"
-                  : "Clear selection"}
-              </button>
+            {currentProject?.settings.texRuntimeId && !projectRuntime ? (
+              <div className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-900/60 rounded-md p-3">
+                Saved project runtime is no longer detected. Choose a detected
+                runtime for this project or clear the project override.
+              </div>
             ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selection?.selectedRuntimeId ? (
+                <button
+                  onClick={() => void selectRuntime(null)}
+                  disabled={savingRuntimeId === "__clear__"}
+                  className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 px-3 py-1.5 rounded-md text-sm border border-zinc-700"
+                >
+                  {savingRuntimeId === "__clear__"
+                    ? "Clearing…"
+                    : "Clear global selection"}
+                </button>
+              ) : null}
+              {currentProject ? (
+                <button
+                  onClick={() => void selectProjectRuntime(null)}
+                  disabled={savingProjectRuntimeId === "__project_disable__"}
+                  className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 px-3 py-1.5 rounded-md text-sm border border-zinc-700"
+                >
+                  {savingProjectRuntimeId === "__project_disable__"
+                    ? "Saving…"
+                    : "Disable runtime for project"}
+                </button>
+              ) : null}
+              {currentProject?.settings.texRuntimeId !== undefined ? (
+                <button
+                  onClick={() => void selectProjectRuntime(undefined)}
+                  disabled={savingProjectRuntimeId === "__project_inherit__"}
+                  className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 px-3 py-1.5 rounded-md text-sm border border-zinc-700"
+                >
+                  {savingProjectRuntimeId === "__project_inherit__"
+                    ? "Saving…"
+                    : "Inherit global runtime"}
+                </button>
+              ) : null}
+            </div>
           </section>
 
           {loading ? (
@@ -244,11 +323,28 @@ export function TexEnvironment() {
                         }`}
                       >
                         {selection?.selectedRuntimeId === runtime.id
-                          ? "Selected"
+                          ? "Global selected"
                           : savingRuntimeId === runtime.id
                             ? "Saving…"
-                            : "Use this runtime"}
+                            : "Use globally"}
                       </button>
+                      {currentProject ? (
+                        <button
+                          onClick={() => void selectProjectRuntime(runtime)}
+                          disabled={savingProjectRuntimeId !== null}
+                          className={`px-3 py-1.5 rounded-md text-sm border disabled:opacity-60 ${
+                            currentProject.settings.texRuntimeId === runtime.id
+                              ? "bg-sky-500/10 text-sky-300 border-sky-900/60"
+                              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700"
+                          }`}
+                        >
+                          {currentProject.settings.texRuntimeId === runtime.id
+                            ? "Project selected"
+                            : savingProjectRuntimeId === runtime.id
+                              ? "Saving…"
+                              : "Use for project"}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 

@@ -42,6 +42,7 @@ export interface EditorState {
   renameProject: (projectId: string, newName: string) => Promise<void>;
   duplicateProject: (projectId: string) => Promise<string>;
   setProjectMainFile: (filePath: string) => Promise<void>;
+  setProjectTexRuntime: (runtimeId: string | null | undefined) => Promise<void>;
 
   // File Actions
   setActiveFile: (fileId: string) => Promise<void>;
@@ -346,6 +347,29 @@ This is a guest mode project. It relies on IndexedDB to store your files securel
     const newProject = { ...currentProject, mainFilePath: filePath };
     await ProjectService.saveProject(newProject);
     set({ currentProject: newProject });
+  },
+
+  setProjectTexRuntime: async (runtimeId: string | null | undefined) => {
+    const { currentProject, projects } = get();
+    if (!currentProject) return;
+
+    const now = Date.now();
+    const newProject: Project = {
+      ...currentProject,
+      updatedAt: now,
+      settings: {
+        ...currentProject.settings,
+        texRuntimeId: runtimeId,
+      },
+    };
+    await ProjectService.saveProject(newProject);
+    set({
+      currentProject: newProject,
+      projects: [
+        ...projects.filter((project) => project.id !== newProject.id),
+        newProject,
+      ].sort((a, b) => b.updatedAt - a.updatedAt),
+    });
   },
 
   setActiveFile: async (fileId: string) => {

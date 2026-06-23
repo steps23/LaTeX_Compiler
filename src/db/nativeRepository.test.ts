@@ -22,6 +22,7 @@ const project: Project = {
     autoCompile: false,
     autoCompileDelayMs: 2000,
     fontSize: 14,
+    texRuntimeId: null,
   },
 };
 

@@ -53,5 +53,5 @@ npm run cargo:check
 
 - No SQLite, local compilation, SyncTeX integration, LSP, collaboration, installer signing or updater yet.
 - Browser persistence is IndexedDB; desktop persistence is app-data filesystem backed. Compilation still reaches the configured HTTP compiler.
-- Local TeX runtime detection and global selected-runtime persistence exist; per-project selection, custom runtime paths, package management and compilation are deferred.
+- Local TeX runtime detection, global selected-runtime persistence and per-project runtime overrides exist; custom runtime paths, package management and compilation are deferred.
 - Windows ARM64 and Linux ARM64 are not Prompt 3 targets.

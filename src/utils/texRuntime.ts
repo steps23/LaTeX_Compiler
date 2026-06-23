@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Project } from "../types";
 import { isTauri } from "./runtime";
 
 export const TEX_RUNTIME_CONTRACT_VERSION = 1 as const;
@@ -193,6 +194,16 @@ export const getTexRuntimeSelection =
     }
     return selection;
   };
+
+export const resolveEffectiveTexRuntimeId = (
+  project: Project | null | undefined,
+  globalSelection: TexRuntimeSelection | null | undefined,
+): string | null => {
+  if (project?.settings.texRuntimeId !== undefined) {
+    return project.settings.texRuntimeId;
+  }
+  return globalSelection?.selectedRuntimeId ?? null;
+};
 
 export const saveTexRuntimeSelection = async (
   runtime: TexRuntime | null,

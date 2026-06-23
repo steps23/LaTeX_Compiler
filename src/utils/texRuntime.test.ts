@@ -5,6 +5,7 @@ import {
   getTexRuntimeSelection,
   isTexRuntimeDiagnostic,
   isTexRuntimeSelection,
+  resolveEffectiveTexRuntimeId,
   saveTexRuntimeSelection,
 } from "./texRuntime";
 
@@ -140,6 +141,59 @@ describe("TeX runtime adapter", () => {
     await expect(getTexRuntimeSelection()).rejects.toThrow(
       "Unsupported TeX runtime selection contract",
     );
+  });
+
+  test("resolves project runtime override before global selection", () => {
+    const project = {
+      id: "project-1",
+      name: "Project",
+      createdAt: 1,
+      updatedAt: 1,
+      mainFilePath: "main.tex",
+      storageMode: "local" as const,
+      syncStatus: "local-only" as const,
+      settings: {
+        compiler: "http-fallback" as const,
+        autoCompile: false,
+        autoCompileDelayMs: 2000,
+        fontSize: 14,
+        texRuntimeId: "project-runtime",
+      },
+    };
+
+    expect(
+      resolveEffectiveTexRuntimeId(project, {
+        contractVersion: 1,
+        selectedRuntimeId: "global-runtime",
+        selectedBinDir: "/opt/tex/bin",
+        updatedAt: 1710000000000,
+      }),
+    ).toBe("project-runtime");
+    expect(
+      resolveEffectiveTexRuntimeId(
+        { ...project, settings: { ...project.settings, texRuntimeId: null } },
+        {
+          contractVersion: 1,
+          selectedRuntimeId: "global-runtime",
+          selectedBinDir: "/opt/tex/bin",
+          updatedAt: 1710000000000,
+        },
+      ),
+    ).toBeNull();
+    expect(
+      resolveEffectiveTexRuntimeId(
+        {
+          ...project,
+          settings: { ...project.settings, texRuntimeId: undefined },
+        },
+        {
+          contractVersion: 1,
+          selectedRuntimeId: "global-runtime",
+          selectedBinDir: "/opt/tex/bin",
+          updatedAt: 1710000000000,
+        },
+      ),
+    ).toBe("global-runtime");
   });
 
   test("exposes contract guards", () => {
