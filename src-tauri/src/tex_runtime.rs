@@ -272,7 +272,10 @@ fn find_executable(bin_dir: &Path, name: &str) -> Option<PathBuf> {
         .find_map(|candidate| {
             let path = bin_dir.join(candidate);
             if is_executable_file(&path) {
-                Some(canonical_or_original(&path))
+                // Preserve the executable name/symlink. TeX Live selects the preloaded
+                // format from argv[0], so canonicalizing xelatex -> xetex or
+                // pdflatex -> pdftex breaks LaTeX documents with "Undefined control sequence".
+                Some(path)
             } else {
                 None
             }
@@ -506,6 +509,28 @@ mod tests {
             .as_deref()
             .is_some_and(|version| version.contains("pdfTeX")));
 
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detection_preserves_tex_engine_symlink_name() {
+        let temp_dir = make_temp_dir("texforge-runtime-symlink");
+        let target_path = temp_dir.join("xetex");
+        let symlink_path = temp_dir.join("xelatex");
+        write_test_executable(&target_path, "XeTeX fixture");
+        std::os::unix::fs::symlink(&target_path, &symlink_path)
+            .expect("engine symlink should be created");
+
+        let diagnostic =
+            detect_tex_runtimes_from_env(Some(temp_dir.clone().into_os_string()), Vec::new());
+        let xelatex = diagnostic.runtimes[0]
+            .tools
+            .iter()
+            .find(|tool| tool.name == "xelatex")
+            .expect("xelatex symlink should be detected");
+
+        assert!(xelatex.path.ends_with("/xelatex"));
         let _ = fs::remove_dir_all(temp_dir);
     }
 
