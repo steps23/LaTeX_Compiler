@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { SyncTexLocation } from "../types";
+import type { SyncTexLocation, SyncTexSourceLocation } from "../types";
 import { isTauri } from "./runtime";
 
 export type SyncTexForwardRequest = {
@@ -7,6 +7,13 @@ export type SyncTexForwardRequest = {
   inputPath: string;
   line: number;
   column?: number;
+};
+
+export type SyncTexReverseRequest = {
+  artifactId: string;
+  page: number;
+  x: number;
+  y: number;
 };
 
 export async function querySyncTexForward(
@@ -19,6 +26,20 @@ export async function querySyncTexForward(
       inputPath: request.inputPath,
       line: request.line,
       column: request.column ?? 1,
+    },
+  });
+}
+
+export async function querySyncTexReverse(
+  request: SyncTexReverseRequest,
+): Promise<SyncTexSourceLocation | null> {
+  if (!isTauri()) return null;
+  return invoke<SyncTexSourceLocation | null>("query_synctex_reverse", {
+    request: {
+      artifactId: request.artifactId,
+      page: request.page,
+      x: request.x,
+      y: request.y,
     },
   });
 }

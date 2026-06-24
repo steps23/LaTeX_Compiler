@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEditorStore } from "../../state/store";
+import { querySyncTexReverse } from "../../utils/syncTex";
 import {
   ZoomIn,
   ZoomOut,
@@ -42,11 +43,13 @@ export function normalizeUnknownError(
 }
 
 export function PdfViewer() {
-  const { compileResult, isCompiling, currentProject } = useEditorStore();
+  const { compileResult, isCompiling, currentProject, files, goToLine } =
+    useEditorStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1.5);
   const [pageNumber, setPageNumber] = useState(1);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [syncTexStatus, setSyncTexStatus] = useState<string | null>(null);
   const [loadedPdf, setLoadedPdf] = useState<{
     sourceBytes: Uint8Array;
     document: pdfjsLib.PDFDocumentProxy;
@@ -332,6 +335,51 @@ export function PdfViewer() {
     };
   }, [visiblePdfDoc, scale, visiblePageNumber]);
 
+  const handlePdfDoubleClick = async (event: MouseEvent<HTMLCanvasElement>) => {
+    const syncTex = compileResult?.syncTex;
+    const canvas = canvasRef.current;
+    if (!syncTex || !canvas || !visiblePdfDoc) return;
+
+    const bounds = canvas.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / scale;
+    const y = (event.clientY - bounds.top) / scale;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) return;
+
+    setSyncTexStatus("Looking up source…");
+    try {
+      const source = await querySyncTexReverse({
+        artifactId: syncTex.id,
+        page: visiblePageNumber,
+        x,
+        y,
+      });
+      if (!source) {
+        setSyncTexStatus("No source location found for this PDF point.");
+        return;
+      }
+
+      const normalizedInput = source.inputPath.replace(/\\/g, "/");
+      const file = files.find(
+        (candidate) =>
+          !candidate.isFolder &&
+          (candidate.path === normalizedInput ||
+            normalizedInput.endsWith(`/${candidate.path}`)),
+      );
+      if (!file) {
+        setSyncTexStatus(`Source file not found: ${source.inputPath}`);
+        return;
+      }
+
+      goToLine(file.id, source.line);
+      setSyncTexStatus(`${file.path}:${source.line}`);
+    } catch (error) {
+      console.error("SyncTeX reverse lookup failed", error);
+      setSyncTexStatus(
+        normalizeUnknownError(error, "SyncTeX reverse lookup failed"),
+      );
+    }
+  };
+
   const handleDownload = () => {
     const bytes = compileResult?.pdfBytes;
     if (!bytes || bytes.length === 0) return;
@@ -416,6 +464,14 @@ export function PdfViewer() {
           <span className="text-xs font-mono text-zinc-300">
             Page {visiblePageNumber} of {visibleTotalPages || "-"}
           </span>
+          {compileResult?.syncTex && (
+            <span
+              className="hidden md:inline text-[11px] text-emerald-400/80"
+              title="Double-click the PDF preview to jump to the matching LaTeX source line."
+            >
+              SyncTeX reverse ready
+            </span>
+          )}
           <button
             onClick={() =>
               setPageNumber((p) => Math.min(visibleTotalPages, p + 1))
@@ -483,7 +539,21 @@ export function PdfViewer() {
           </div>
         ) : (
           <div className="inline-block relative shadow-2xl ring-1 ring-zinc-800 bg-white">
-            <canvas ref={canvasRef} className="block shadow-sm" />
+            <canvas
+              ref={canvasRef}
+              onDoubleClick={handlePdfDoubleClick}
+              className={`block shadow-sm ${compileResult?.syncTex ? "cursor-crosshair" : ""}`}
+              title={
+                compileResult?.syncTex
+                  ? "Double-click a PDF point to jump to source"
+                  : undefined
+              }
+            />
+            {syncTexStatus && (
+              <div className="absolute left-2 bottom-2 max-w-[calc(100%-1rem)] truncate rounded bg-zinc-950/85 px-2 py-1 text-[11px] text-zinc-200 shadow-lg">
+                {syncTexStatus}
+              </div>
+            )}
           </div>
         )}
       </div>

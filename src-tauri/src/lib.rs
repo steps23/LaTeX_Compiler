@@ -124,6 +124,15 @@ struct SyncTexForwardRequest {
     column: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncTexReverseRequest {
+    artifact_id: String,
+    page: u64,
+    x: f64,
+    y: f64,
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct SyncTexLocation {
@@ -134,6 +143,16 @@ struct SyncTexLocation {
     v: Option<f64>,
     width: Option<f64>,
     height: Option<f64>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct SyncTexSourceLocation {
+    input_path: String,
+    line: u64,
+    column: Option<i64>,
+    offset: Option<i64>,
+    context: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -657,6 +676,60 @@ fn parse_compile_errors(raw_log: &str) -> Vec<NativeCompileMessage> {
         });
     }
     errors
+}
+
+fn parse_synctex_edit_output(
+    output: &str,
+    artifact_dir: &std::path::Path,
+) -> Option<SyncTexSourceLocation> {
+    let mut input_path = None;
+    let mut line = None;
+    let mut column = None;
+    let mut offset = None;
+    let mut context = None;
+
+    for row in output.lines() {
+        if let Some((key, value)) = row.split_once(':') {
+            let value = value.trim();
+            match key {
+                "Input" => input_path = Some(normalize_synctex_input_path(value, artifact_dir)?),
+                "Line" => line = value.parse::<u64>().ok(),
+                "Column" => column = value.parse::<i64>().ok(),
+                "Offset" => offset = value.parse::<i64>().ok(),
+                "Context" => context = Some(value.to_string()).filter(|text| !text.is_empty()),
+                _ => {}
+            }
+        }
+    }
+
+    Some(SyncTexSourceLocation {
+        input_path: input_path?,
+        line: line?.max(1),
+        column,
+        offset,
+        context,
+    })
+}
+
+fn normalize_synctex_input_path(input: &str, artifact_dir: &std::path::Path) -> Option<String> {
+    let raw_path = std::path::Path::new(input);
+    let relative = if raw_path.is_absolute() {
+        raw_path.strip_prefix(artifact_dir).ok()?
+    } else {
+        raw_path
+    };
+    let mut clean = PathBuf::new();
+    for component in relative.components() {
+        match component {
+            std::path::Component::Normal(part) => clean.push(part),
+            std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    if clean.as_os_str().is_empty() {
+        return None;
+    }
+    Some(clean.to_string_lossy().replace('\\', "/"))
 }
 
 fn parse_synctex_view_output(output: &str) -> Option<SyncTexLocation> {
@@ -1226,6 +1299,40 @@ fn query_synctex_forward(
 }
 
 #[tauri::command]
+fn query_synctex_reverse(
+    app: tauri::AppHandle,
+    request: SyncTexReverseRequest,
+) -> Result<Option<SyncTexSourceLocation>, String> {
+    validate_id(&request.artifact_id)?;
+    if request.page == 0 || !request.x.is_finite() || !request.y.is_finite() {
+        return Err("invalid SyncTeX reverse coordinates".into());
+    }
+    let artifact_dir = compile_artifact_dir(&app, &request.artifact_id)?;
+    let pdf_path = artifact_dir.join("main.pdf");
+    if !pdf_path.is_file() {
+        return Ok(None);
+    }
+    let runtime_id = fs::read_to_string(artifact_dir.join("tex-runtime-id.txt"))
+        .map_err(|error| format!("failed to read SyncTeX runtime metadata: {error}"))?;
+    let synctex_path = selected_runtime_tool(runtime_id.trim(), "synctex")?;
+    let output_arg = format!("{}:{}:{}:main.pdf", request.page, request.x, request.y);
+    let output = Command::new(synctex_path)
+        .args(["edit", "-o", output_arg.as_str()])
+        .current_dir(&artifact_dir)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("failed to run SyncTeX reverse lookup: {error}"))?;
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    if !output.stderr.is_empty() {
+        text.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+    if !output.status.success() && !text.contains("SyncTeX result begin") {
+        return Err(format!("SyncTeX reverse lookup failed: {}", text.trim()));
+    }
+    Ok(parse_synctex_edit_output(&text, &artifact_dir))
+}
+
+#[tauri::command]
 fn query_latex_lsp_completions(
     app: tauri::AppHandle,
     request: LatexLspCompletionRequest,
@@ -1409,6 +1516,7 @@ pub fn run() {
             compile_latex_project,
             cancel_latex_compile,
             query_synctex_forward,
+            query_synctex_reverse,
             query_latex_lsp_completions,
             get_all_projects,
             get_project,
@@ -1428,11 +1536,11 @@ mod tests {
     use super::{
         clear_compile_job, compile_process_path_env, detect_tex_runtimes, empty_compile_error,
         empty_tex_runtime_selection, get_runtime_info, is_compile_job_cancelled, lsp_message,
-        mark_compile_job_cancelled, mark_compile_job_started, parse_lsp_completion_response,
-        parse_lsp_messages, parse_synctex_view_output, read_capped_text_file,
-        validate_compile_engine, validated_project_path, write_compile_workspace,
-        CompileFilePayload, CompileJobRegistry, CompileLatexRequest, StorageInfo,
-        STORAGE_CONTRACT_VERSION,
+        mark_compile_job_cancelled, mark_compile_job_started, normalize_synctex_input_path,
+        parse_lsp_completion_response, parse_lsp_messages, parse_synctex_edit_output,
+        parse_synctex_view_output, read_capped_text_file, validate_compile_engine,
+        validated_project_path, write_compile_workspace, CompileFilePayload, CompileJobRegistry,
+        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -1565,6 +1673,31 @@ mod tests {
         assert_eq!(location.y, 134.764618);
         assert_eq!(location.width, Some(343.711060));
         assert_eq!(location.height, Some(6.918498));
+    }
+
+    #[test]
+    fn synctex_edit_output_parses_source_location() {
+        let artifact_dir = std::env::temp_dir().join("texforge-artifact-fixture");
+        let input = artifact_dir.join("./chapters/intro.tex");
+        let output = format!(
+            "SyncTeX result begin\nOutput:main.pdf\nInput:{}\nLine:42\nColumn:-1\nOffset:0\nContext:\nSyncTeX result end",
+            input.to_string_lossy()
+        );
+
+        let location =
+            parse_synctex_edit_output(&output, &artifact_dir).expect("source should parse");
+
+        assert_eq!(location.input_path, "chapters/intro.tex");
+        assert_eq!(location.line, 42);
+        assert_eq!(location.column, Some(-1));
+        assert_eq!(location.offset, Some(0));
+    }
+
+    #[test]
+    fn synctex_input_path_normalization_rejects_escape() {
+        let artifact_dir = std::env::temp_dir().join("texforge-artifact-fixture");
+
+        assert!(normalize_synctex_input_path("../outside.tex", &artifact_dir).is_none());
     }
 
     #[test]

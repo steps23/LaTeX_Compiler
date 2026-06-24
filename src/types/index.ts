@@ -93,6 +93,14 @@ export type SyncTexLocation = {
   height?: number;
 };
 
+export type SyncTexSourceLocation = {
+  inputPath: string;
+  line: number;
+  column?: number;
+  offset?: number;
+  context?: string;
+};
+
 export type CompileResult = {
   success: boolean;
   pdfBytes?: Uint8Array;

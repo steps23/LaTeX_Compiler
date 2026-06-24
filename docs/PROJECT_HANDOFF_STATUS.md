@@ -7,11 +7,11 @@ Reference worktree/prompt source: `/Users/stefano_ruggiero/Documents/LaTeX app/t
 
 ## Current Summary
 
-The repository source files are aligned with the `texforge-prompt-03` reference worktree. No source changes were required during the latest verification pass.
+The repository has advanced beyond the `texforge-prompt-03` reference baseline with local TeX compilation, SyncTeX, texlab/LSP, Prompt 9 reverse SyncTeX UI, compile feedback and app icon work.
 
-Status: `verificato in CI`
+Status: `verificato localmente`
 
-Latest phase added: Prompt 8 texlab/LSP baseline — native diagnostics detect texlab and Monaco completion can call a bounded one-shot texlab bridge.
+Latest phase added: Prompt 9 SyncTeX reverse UI baseline — the PDF preview can double-click back to source through a bounded `synctex edit` IPC command.
 
 ## What Has Been Done
 
@@ -42,6 +42,7 @@ Latest phase added: Prompt 8 texlab/LSP baseline — native diagnostics detect t
 - Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, rejects oversized input/file sets, validates the project engine allowlist, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, supports cancellation through job IDs, uses file-backed stdout/stderr with capped log reads, reads size-capped `main.pdf` and removes failed/transient workspaces.
 - Prompt 7 SyncTeX baseline is implemented: fixed TeX invocations pass `-synctex=1`, successful native compiles retain app-cache artifacts by validated job ID, and `query_synctex_forward` runs detected `synctex view` with validated project-relative input paths and 1-based line numbers.
 - Prompt 8 texlab/LSP baseline is implemented: runtime diagnostics detect allowlisted `texlab`, `query_latex_lsp_completions` validates runtime/path/cursor input, writes a bounded app-cache workspace snapshot, speaks LSP JSON-RPC over texlab stdio for one-shot completion, and Monaco's LaTeX completion provider degrades to empty suggestions when texlab is unavailable.
+- Prompt 9 SyncTeX reverse UI baseline is implemented: `query_synctex_reverse` validates the compile artifact and page/coordinate input, invokes detected `synctex edit -o page:x:y:main.pdf` inside the persisted app-cache artifact, normalizes the returned source path back to a project-relative path, and the PDF.js preview double-click jumps Monaco to the returned file and line.
 - Browser compilation continues to use the HTTP fallback compiler.
 - LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select/clear global runtime plus set project inherit/disable/override behavior when a project is open.
 
@@ -96,7 +97,7 @@ Evidence:
 - Prettier format check passed.
 - TypeScript typecheck passed.
 - ESLint passed.
-- Vitest passed: 19 test files, 67 tests.
+- Vitest passed: 19 test files, 68 tests.
 - Vite/web build passed.
 - Server bundle build passed.
 
@@ -127,7 +128,7 @@ Evidence:
 
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml` passed.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` passed.
-- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 15 tests.
+- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 19 tests.
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed.
 
 ### Git State
@@ -140,7 +141,7 @@ Result before this update: clean at `b4708832`.
 
 Current intended changes:
 
-- `src-tauri/src/lib.rs` adds `compile_latex_project`, `cancel_latex_compile`, `query_synctex_forward`, `query_latex_lsp_completions`, bounded compile/LSP workspaces/artifacts, explicit TeX/SyncTeX/texlab process invocation, engine allowlist validation, timeout/cancellation/input/file/log/PDF/LSP caps, non-`latexmk` two-pass fallback and native compile/SyncTeX/LSP result/limit tests.
+- `src-tauri/src/lib.rs` adds `compile_latex_project`, `cancel_latex_compile`, `query_synctex_forward`, `query_synctex_reverse`, `query_latex_lsp_completions`, bounded compile/LSP workspaces/artifacts, explicit TeX/SyncTeX/texlab process invocation, engine allowlist validation, timeout/cancellation/input/file/log/PDF/LSP caps, non-`latexmk` two-pass fallback and native compile/SyncTeX/LSP result/limit tests.
 - `src/features/compiler/index.ts` selects native local compiler in Tauri and HTTP fallback in browser.
 - `src/features/compiler/NativeLocalCompiler.ts` adds the desktop compiler adapter.
 - `src/features/compiler/NativeLocalCompiler.test.ts` covers native compile IPC payloads and PDF byte hydration.
@@ -169,7 +170,8 @@ Authoritative/current docs were checked through Context7:
   - command access from Rust through `AppHandle`
   - runtime-authority/capability denial model
   - Rust `Command` process invocation and timeout handling
-  - SyncTeX CLI `view` semantics from local TeX Live `synctex help view` output
+  - SyncTeX CLI `view` and `edit` semantics from local TeX Live `synctex help view` / `synctex help edit` output
+  - PDF.js canvas rendering, HiDPI viewport scaling and `PageViewport.convertToPdfPoint` behavior from `/mozilla/pdf.js`
   - texlab LSP internals and completion/build request behavior from `/latex-lsp/texlab`
   - LSP 3.17 initialize, `textDocument/didOpen`, `textDocument/completion` and `Content-Length` JSON-RPC framing from `/microsoft/language-server-protocol`
   - Vite build/code-splitting guidance for known bundle warnings
@@ -185,7 +187,7 @@ Relevant alignment:
 
 - `README.md` — project overview, browser/desktop usage, quality gates, limitations.
 - `AGENTS.md` — repository work rules and required checks.
-- `docs/IMPLEMENTATION_STATUS.md` — status matrix for Prompt 3 and Prompt 4.
+- `docs/IMPLEMENTATION_STATUS.md` — status matrix through Prompt 9 baseline.
 - `docs/SUPPORT_MATRIX.md` — platform/evidence matrix.
 - `docs/ARCHITECTURE.md` — architecture overview.
 - `src-tauri/tauri.conf.json` — Tauri build/dev/CSP/window config.
@@ -203,9 +205,7 @@ The app is not yet a fully offline production desktop LaTeX editor. Deferred or 
 
 - Custom authorized runtime paths.
 - Real distribution verification on Windows/Linux and installed-app smoke tests.
-- Offline/local LaTeX compilation.
-- Reverse PDF-to-source SyncTeX UI.
-- PDF source/preview synchronization beyond source-to-PDF lookup primitive.
+- Installed-app/manual smoke for PDF-to-source SyncTeX UI.
 - Persistent texlab/LSP session, diagnostics, hover and document-symbol UI.
 - Real-machine texlab smoke test.
 - SQLite metadata storage; current desktop metadata uses JSON manifests in app-data project directories.

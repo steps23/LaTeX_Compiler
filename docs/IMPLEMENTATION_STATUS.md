@@ -58,7 +58,7 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | SyncTeX artifact boundary    | verificato localmente | Successful desktop compiles retain app-cache `main.pdf`/`main.synctex(.gz)` artifacts by validated job ID; failed workspaces drop |
 | SyncTeX forward lookup IPC   | verificato localmente | `query_synctex_forward` validates artifact ID, project-relative input path and 1-based line; Rust parses `synctex view` records   |
 | Frontend SyncTeX adapter     | verificato localmente | `src/utils/syncTex.ts` calls the bounded native command in Tauri and returns `null` in browser mode                               |
-| Reverse PDF-to-source lookup | non verificato        | Deferred; no PDF canvas click mapping to `synctex edit` yet                                                                       |
+| Reverse PDF-to-source lookup | verificato localmente | Implemented in Prompt 9 through bounded `synctex edit` IPC and PDF double-click source navigation                                 |
 | Installed-app SyncTeX smoke  | non verificato        | Deferred; CLI documentation and unit/contract tests only                                                                          |
 
 ## Prompt 8 Baseline
@@ -74,11 +74,21 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | LSP diagnostics/hovers        | non verificato        | Deferred; no `publishDiagnostics`, hover or document-symbol UI yet                                                                 |
 | Real texlab smoke             | non verificato        | Deferred; `texlab` is not installed on this local host                                                                             |
 
+## Prompt 9 Baseline
+
+| Area                                | Stato                 | Evidence                                                                                                                               |
+| ----------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| SyncTeX reverse IPC                 | verificato localmente | `query_synctex_reverse` validates artifact/page/coordinates and invokes detected `synctex edit -o page:x:y:main.pdf` in app cache      |
+| SyncTeX reverse parser              | verificato localmente | Rust tests parse `Input`, `Line`, `Column`, `Offset` and reject project-path escape during source path normalization                   |
+| PDF click coordinate mapping        | verificato localmente | PDF.js canvas double-click maps CSS viewport coordinates to SyncTeX big-point top-left coordinates using the active preview scale      |
+| PDF-to-source navigation UI         | verificato localmente | PDF preview exposes “SyncTeX reverse ready”; double-click jumps to the matching Monaco file and line through the existing store action |
+| Installed-app reverse SyncTeX smoke | non verificato        | Deferred; app is installed locally but manual click-through smoke is not recorded                                                      |
+
 ## Deferred Beyond Current State
 
 - SQLite metadata storage.
 - Custom authorized runtime paths.
-- Reverse SyncTeX UI, persistent texlab/LSP diagnostics/hovers, collaboration and Git.
+- Persistent texlab/LSP diagnostics/hovers, collaboration and Git.
 - Security audit, packaging, signing, installers and updater.
 
 The remote HTTP compiler remains active for browser builds. Desktop local compilation is implemented; local macOS TeX CLI smoke passed, but installed-app compile smoke and real-machine verification across Windows/Linux remain required before any operating system is declared release-supported.
