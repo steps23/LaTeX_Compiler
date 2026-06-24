@@ -31,6 +31,7 @@ const TEX_TOOLS: &[&str] = &[
     "chktex",
     "texcount",
     "texdoc",
+    "texlab",
     "dvipdfmx",
     "dvips",
 ];
@@ -83,6 +84,7 @@ pub struct TexRuntimeCapabilities {
     pub has_bibliography: bool,
     pub has_package_manager: bool,
     pub has_synctex: bool,
+    pub has_texlab: bool,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -408,6 +410,7 @@ fn runtime_capabilities(
         has_bibliography: has("bibtex") || has("biber"),
         has_package_manager: !matches!(package_manager, PackageManagerKind::None),
         has_synctex: has("synctex"),
+        has_texlab: has("texlab"),
     }
 }
 

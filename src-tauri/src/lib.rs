@@ -1,13 +1,14 @@
 mod tex_runtime;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
     fs,
+    io::{BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -28,6 +29,9 @@ const MAX_COMPILE_LOG_BYTES: u64 = 1_000_000;
 const MAX_COMPILE_INPUT_BYTES: u64 = 200 * 1024 * 1024;
 const MAX_COMPILE_FILES: usize = 5_000;
 const MAX_PDF_BYTES: u64 = 100 * 1024 * 1024;
+const LSP_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_LSP_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_LSP_COMPLETIONS: usize = 100;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,7 +66,7 @@ struct CompileJobRegistry {
     cancelled_jobs: Mutex<BTreeSet<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CompileFilePayload {
     path: String,
@@ -130,6 +134,26 @@ struct SyncTexLocation {
     v: Option<f64>,
     width: Option<f64>,
     height: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LatexLspCompletionRequest {
+    runtime_id: String,
+    main_path: String,
+    active_path: String,
+    line: u64,
+    column: u64,
+    files: Vec<CompileFilePayload>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct LatexLspCompletion {
+    label: String,
+    detail: Option<String>,
+    documentation: Option<String>,
+    insert_text: Option<String>,
 }
 
 #[tauri::command]
@@ -652,6 +676,307 @@ fn parse_synctex_view_output(output: &str) -> Option<SyncTexLocation> {
     })
 }
 
+fn file_uri(path: &std::path::Path) -> String {
+    let mut value = String::from("file://");
+    let path = path.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) && !path.starts_with('/') {
+        value.push('/');
+    }
+    for byte in path.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => {
+                value.push(byte as char)
+            }
+            _ => value.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    value
+}
+
+fn lsp_message(value: Value) -> Result<Vec<u8>, String> {
+    let payload = serde_json::to_vec(&value)
+        .map_err(|error| format!("failed to encode LSP message: {error}"))?;
+    let mut message = format!("Content-Length: {}\r\n\r\n", payload.len()).into_bytes();
+    message.extend(payload);
+    Ok(message)
+}
+
+#[cfg(test)]
+fn parse_lsp_messages(output: &[u8]) -> Vec<Value> {
+    let mut messages = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < output.len() {
+        let Some(header_end) = output[cursor..]
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|offset| cursor + offset)
+        else {
+            break;
+        };
+        let header = String::from_utf8_lossy(&output[cursor..header_end]);
+        let Some(length) = header.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("Content-Length")
+                .then(|| value.trim().parse::<usize>().ok())?
+        }) else {
+            break;
+        };
+        if length > MAX_LSP_MESSAGE_BYTES {
+            break;
+        }
+        let body_start = header_end + 4;
+        let body_end = body_start.saturating_add(length);
+        if body_end > output.len() {
+            break;
+        }
+        if let Ok(value) = serde_json::from_slice::<Value>(&output[body_start..body_end]) {
+            messages.push(value);
+        }
+        cursor = body_end;
+    }
+    messages
+}
+
+fn documentation_text(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return Some(text.to_string());
+    }
+    value
+        .as_object()
+        .and_then(|object| object.get("value"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn parse_lsp_completion_result(result: Value) -> Vec<LatexLspCompletion> {
+    let items = if let Some(items) = result.as_array() {
+        items.clone()
+    } else if let Some(items) = result.get("items").and_then(Value::as_array) {
+        items.clone()
+    } else {
+        Vec::new()
+    };
+
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let label = item.get("label")?.as_str()?.to_string();
+            Some(LatexLspCompletion {
+                label,
+                detail: item
+                    .get("detail")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+                documentation: item.get("documentation").and_then(documentation_text),
+                insert_text: item
+                    .get("insertText")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+            })
+        })
+        .take(MAX_LSP_COMPLETIONS)
+        .collect()
+}
+
+#[cfg(test)]
+fn parse_lsp_completion_response(output: &[u8], request_id: u64) -> Vec<LatexLspCompletion> {
+    parse_lsp_messages(output)
+        .into_iter()
+        .find(|message| message.get("id").and_then(Value::as_u64) == Some(request_id))
+        .and_then(|message| message.get("result").cloned())
+        .map(parse_lsp_completion_result)
+        .unwrap_or_default()
+}
+
+fn spawn_lsp_reader(stdout: impl Read + Send + 'static) -> mpsc::Receiver<Value> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut content_length = None;
+            loop {
+                let mut line = String::new();
+                let Ok(read) = reader.read_line(&mut line) else {
+                    return;
+                };
+                if read == 0 {
+                    return;
+                }
+                let trimmed = line.trim_end_matches(['\r', '\n']);
+                if trimmed.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = trimmed.split_once(':') {
+                    if name.eq_ignore_ascii_case("Content-Length") {
+                        content_length = value.trim().parse::<usize>().ok();
+                    }
+                }
+            }
+            let Some(length) = content_length else {
+                return;
+            };
+            if length > MAX_LSP_MESSAGE_BYTES {
+                return;
+            }
+            let mut body = vec![0; length];
+            if reader.read_exact(&mut body).is_err() {
+                return;
+            }
+            if let Ok(value) = serde_json::from_slice::<Value>(&body) {
+                let _ = sender.send(value);
+            }
+        }
+    });
+    receiver
+}
+
+fn wait_for_lsp_response(
+    receiver: &mpsc::Receiver<Value>,
+    request_id: u64,
+    start: Instant,
+) -> Result<Value, String> {
+    loop {
+        if start.elapsed() >= LSP_TIMEOUT {
+            return Err("texlab completion request timed out".into());
+        }
+        match receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(message) if message.get("id").and_then(Value::as_u64) == Some(request_id) => {
+                if let Some(error) = message.get("error") {
+                    return Err(format!("texlab LSP request failed: {error}"));
+                }
+                return Ok(message.get("result").cloned().unwrap_or(Value::Null));
+            }
+            Ok(_) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("texlab closed before LSP response".into())
+            }
+        }
+    }
+}
+
+fn write_lsp_message(stdin: &mut impl Write, value: Value) -> Result<(), String> {
+    stdin
+        .write_all(&lsp_message(value)?)
+        .map_err(|error| format!("failed to write texlab LSP message: {error}"))
+}
+
+fn run_texlab_completion(
+    texlab_path: &str,
+    workspace_dir: &std::path::Path,
+    request: &LatexLspCompletionRequest,
+) -> Result<Vec<LatexLspCompletion>, String> {
+    let active_path = validated_project_path(&request.active_path)?;
+    let active_disk_path = workspace_dir.join(active_path);
+    if !active_disk_path.is_file() {
+        return Err(format!("active file {} not found", request.active_path));
+    }
+    let active_text = fs::read_to_string(&active_disk_path)
+        .map_err(|error| format!("failed to read active LSP file: {error}"))?;
+    let active_uri = file_uri(&active_disk_path);
+    let workspace_uri = file_uri(workspace_dir);
+    let line = request.line.saturating_sub(1);
+    let character = request.column.saturating_sub(1);
+
+    let mut child = Command::new(texlab_path)
+        .current_dir(workspace_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("failed to start texlab: {error}"))?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "failed to open texlab stdin".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to open texlab stdout".to_string())?;
+    let receiver = spawn_lsp_reader(stdout);
+    let start = Instant::now();
+
+    write_lsp_message(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "processId": std::process::id(),
+                "rootUri": workspace_uri,
+                "capabilities": {},
+                "workspaceFolders": null,
+                "initializationOptions": {}
+            }
+        }),
+    )?;
+    let _ = wait_for_lsp_response(&receiver, 1, start)?;
+    write_lsp_message(
+        &mut stdin,
+        json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }),
+    )?;
+    write_lsp_message(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": active_uri,
+                    "languageId": "latex",
+                    "version": 1,
+                    "text": active_text
+                }
+            }
+        }),
+    )?;
+
+    let request_id = 2u64;
+    write_lsp_message(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "textDocument/completion",
+            "params": {
+                "textDocument": { "uri": active_uri },
+                "position": { "line": line, "character": character },
+                "context": { "triggerKind": 1 }
+            }
+        }),
+    )?;
+    let completions =
+        parse_lsp_completion_result(wait_for_lsp_response(&receiver, request_id, start)?);
+
+    let _ = write_lsp_message(
+        &mut stdin,
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "shutdown", "params": null }),
+    );
+    let _ = wait_for_lsp_response(&receiver, 3, start);
+    let _ = write_lsp_message(
+        &mut stdin,
+        json!({ "jsonrpc": "2.0", "method": "exit", "params": null }),
+    );
+    drop(stdin);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if start.elapsed() >= LSP_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break;
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(20)),
+            Err(error) => return Err(format!("failed waiting for texlab: {error}")),
+        }
+    }
+
+    Ok(completions)
+}
+
 fn move_successful_compile_artifact(
     app: &tauri::AppHandle,
     artifact_id: &str,
@@ -882,6 +1207,34 @@ fn query_synctex_forward(
 }
 
 #[tauri::command]
+fn query_latex_lsp_completions(
+    app: tauri::AppHandle,
+    request: LatexLspCompletionRequest,
+) -> Result<Vec<LatexLspCompletion>, String> {
+    validate_id(&request.runtime_id)?;
+    if request.line == 0 || request.column == 0 {
+        return Err("LSP line and column must be 1-based".into());
+    }
+    let work_dir = unique_compile_dir(&app)?;
+    let result = (|| -> Result<Vec<LatexLspCompletion>, String> {
+        write_compile_workspace(
+            &work_dir,
+            &CompileLatexRequest {
+                job_id: "lsp-workspace".into(),
+                main_path: request.main_path.clone(),
+                runtime_id: Some(request.runtime_id.clone()),
+                compile_engine: Some("auto".into()),
+                files: request.files.clone(),
+            },
+        )?;
+        let texlab_path = selected_runtime_tool(&request.runtime_id, "texlab")?;
+        run_texlab_completion(&texlab_path, &work_dir, &request)
+    })();
+    let _ = fs::remove_dir_all(&work_dir);
+    result
+}
+
+#[tauri::command]
 fn get_all_projects(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
     let root = project_root(&app)?;
     let mut projects = Vec::new();
@@ -1037,6 +1390,7 @@ pub fn run() {
             compile_latex_project,
             cancel_latex_compile,
             query_synctex_forward,
+            query_latex_lsp_completions,
             get_all_projects,
             get_project,
             save_project,
@@ -1054,11 +1408,11 @@ pub fn run() {
 mod tests {
     use super::{
         clear_compile_job, detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection,
-        get_runtime_info, is_compile_job_cancelled, mark_compile_job_cancelled,
-        mark_compile_job_started, parse_synctex_view_output, read_capped_text_file,
-        validate_compile_engine, validated_project_path, write_compile_workspace,
-        CompileFilePayload, CompileJobRegistry, CompileLatexRequest, StorageInfo,
-        STORAGE_CONTRACT_VERSION,
+        get_runtime_info, is_compile_job_cancelled, lsp_message, mark_compile_job_cancelled,
+        mark_compile_job_started, parse_lsp_completion_response, parse_lsp_messages,
+        parse_synctex_view_output, read_capped_text_file, validate_compile_engine,
+        validated_project_path, write_compile_workspace, CompileFilePayload, CompileJobRegistry,
+        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -1142,6 +1496,35 @@ mod tests {
         assert_eq!(info["errors"][0]["severity"], "error");
         assert_eq!(info["durationMs"], 12);
         assert!(info["syncTex"].is_null());
+    }
+
+    #[test]
+    fn lsp_message_parser_reads_completion_response() {
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "isIncomplete": false,
+                "items": [{
+                    "label": "\\\\section",
+                    "detail": "section",
+                    "documentation": { "kind": "markdown", "value": "Section command" },
+                    "insertText": "\\\\section{$1}"
+                }]
+            }
+        });
+        let bytes = lsp_message(response).expect("LSP message should encode");
+
+        let messages = parse_lsp_messages(&bytes);
+        let completions = parse_lsp_completion_response(&bytes, 2);
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].label, "\\\\section");
+        assert_eq!(
+            completions[0].documentation.as_deref(),
+            Some("Section command")
+        );
     }
 
     #[test]

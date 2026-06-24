@@ -10,8 +10,9 @@ TeXForge is a React 19/Vite LaTeX editor with a Tauri 2 desktop foundation. The 
 - Desktop IPC exposes versioned runtime/storage info, bounded project/file persistence commands, local TeX runtime diagnostics, selected-runtime persistence and bounded local compilation.
 - Tauri restores window position, size and maximized state through the official window-state plugin.
 - Filesystem, shell, dialog, opener and process capabilities are not granted in this phase.
-- A LaTeX Environment screen detects and selects existing TeX Live, MacTeX or MiKTeX tools from bounded Rust code without invoking a shell, accepting arbitrary executable paths or modifying system installations.
+- A LaTeX Environment screen detects and selects existing TeX Live, MacTeX or MiKTeX tools from bounded Rust code without invoking a shell, accepting arbitrary executable paths or modifying system installations; texlab presence is reported when available.
 - Desktop builds can compile/cancel jobs with the selected local TeX runtime and per-project engine selection through bounded Tauri commands; successful native builds also keep a bounded SyncTeX artifact for source-to-PDF lookup. Browser builds continue to use the HTTP fallback compiler.
+- Desktop LaTeX autocomplete has a bounded texlab/LSP bridge that starts the selected detected `texlab` executable for one-shot completion requests; browser mode returns no native LSP completions.
 
 See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) and [Support Matrix](docs/SUPPORT_MATRIX.md) for evidence levels. A configured CI job is not an installed-app or real-machine test.
 
@@ -52,7 +53,7 @@ npm run cargo:check
 
 ## Known Limitations
 
-- No SQLite, SyncTeX integration, LSP, collaboration, installer signing or updater yet.
+- No SQLite, full SyncTeX reverse UI, persistent LSP session, collaboration, installer signing or updater yet.
 - Browser persistence is IndexedDB; desktop persistence is app-data filesystem backed. Browser compilation still reaches the configured HTTP compiler.
-- Local TeX runtime detection, selected-runtime persistence, per-project runtime/engine overrides, local desktop compilation and bounded SyncTeX forward-lookup primitives exist; custom runtime paths and package management are deferred.
+- Local TeX runtime detection, selected-runtime persistence, per-project runtime/engine overrides, local desktop compilation, bounded SyncTeX forward-lookup primitives and one-shot texlab completion bridge exist; custom runtime paths and package management are deferred.
 - Windows ARM64 and Linux ARM64 are not Prompt 3 targets.

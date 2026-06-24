@@ -7,6 +7,7 @@ import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
 import { FileNode } from "../../types";
+import { queryLatexLspCompletions } from "../../utils/latexLsp";
 
 // Configure Monaco to be completely local
 self.MonacoEnvironment = {
@@ -126,7 +127,51 @@ export function MonacoEditorRenderer() {
   }, [activeLine, activeFileId]);
 
   useEffect(() => {
+    const completionProvider = monaco.languages.registerCompletionItemProvider(
+      "latex",
+      {
+        triggerCharacters: ["\\", "{"],
+        async provideCompletionItems(model, position) {
+          const state = useEditorStore.getState();
+          const activeFile = state.files.find(
+            (file) => file.id === state.activeFileId,
+          );
+          if (!activeFile || activeFile.blob || activeFile.isFolder) {
+            return { suggestions: [] };
+          }
+
+          const completions = await queryLatexLspCompletions({
+            files: state.files,
+            activePath: activeFile.path,
+            line: position.lineNumber,
+            column: position.column,
+            project: state.currentProject,
+          }).catch(() => []);
+
+          const word = model.getWordUntilPosition(position);
+          const range = new monaco.Range(
+            position.lineNumber,
+            word.startColumn,
+            position.lineNumber,
+            word.endColumn,
+          );
+
+          return {
+            suggestions: completions.map((completion) => ({
+              label: completion.label,
+              kind: monaco.languages.CompletionItemKind.Text,
+              detail: completion.detail,
+              documentation: completion.documentation,
+              insertText: completion.insertText ?? completion.label,
+              range,
+            })),
+          };
+        },
+      },
+    );
+
     return () => {
+      completionProvider.dispose();
       disposablesRef.current.forEach((d) => d.dispose());
       disposablesRef.current = [];
     };

@@ -26,6 +26,7 @@ export type TexRuntimeCapabilities = {
   hasBibliography: boolean;
   hasPackageManager: boolean;
   hasSynctex: boolean;
+  hasTexlab: boolean;
 };
 
 export type TexRuntime = {
@@ -110,7 +111,8 @@ const isCapabilities = (value: unknown): value is TexRuntimeCapabilities => {
     typeof capabilities.canCompilePdf === "boolean" &&
     typeof capabilities.hasBibliography === "boolean" &&
     typeof capabilities.hasPackageManager === "boolean" &&
-    typeof capabilities.hasSynctex === "boolean"
+    typeof capabilities.hasSynctex === "boolean" &&
+    typeof capabilities.hasTexlab === "boolean"
   );
 };
 

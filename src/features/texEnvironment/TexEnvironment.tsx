@@ -350,6 +350,9 @@ export function TexEnvironment() {
                         <br />
                         SyncTeX:{" "}
                         {runtime.capabilities.hasSynctex ? "yes" : "no"}
+                        <br />
+                        texlab/LSP:{" "}
+                        {runtime.capabilities.hasTexlab ? "yes" : "no"}
                       </div>
                       <button
                         onClick={() => void selectRuntime(runtime)}

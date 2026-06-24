@@ -68,6 +68,7 @@ describe("TeX runtime adapter", () => {
             hasBibliography: false,
             hasPackageManager: true,
             hasSynctex: false,
+            hasTexlab: true,
           },
         },
       ],
@@ -107,6 +108,7 @@ describe("TeX runtime adapter", () => {
         hasBibliography: false,
         hasPackageManager: true,
         hasSynctex: false,
+        hasTexlab: false,
       },
     };
 

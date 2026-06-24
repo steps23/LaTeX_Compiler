@@ -61,11 +61,24 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Reverse PDF-to-source lookup | non verificato        | Deferred; no PDF canvas click mapping to `synctex edit` yet                                                                       |
 | Installed-app SyncTeX smoke  | non verificato        | Deferred; CLI documentation and unit/contract tests only                                                                          |
 
+## Prompt 8 Baseline
+
+| Area                          | Stato                 | Evidence                                                                                                                           |
+| ----------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| texlab detection              | verificato localmente | Runtime diagnostic now includes `texlab` in the allowlisted tool scan and reports `capabilities.hasTexlab`                         |
+| LSP JSON-RPC framing          | verificato localmente | Rust unit test covers `Content-Length` message framing and completion response parsing                                             |
+| Bounded texlab completion IPC | verificato localmente | `query_latex_lsp_completions` validates runtime ID, project-relative paths and 1-based cursor, writes app-cache workspace snapshot |
+| Frontend LSP adapter          | verificato localmente | `src/utils/latexLsp.ts` validates completion payloads and sends selected-runtime/project snapshot payloads                         |
+| Monaco completion bridge      | verificato localmente | LaTeX Monaco completion provider calls the frontend LSP adapter and degrades to empty suggestions on unavailable native LSP        |
+| Persistent LSP session        | non verificato        | Deferred; current bridge is one-shot per completion request                                                                        |
+| LSP diagnostics/hovers        | non verificato        | Deferred; no `publishDiagnostics`, hover or document-symbol UI yet                                                                 |
+| Real texlab smoke             | non verificato        | Deferred; `texlab` is not installed on this local host                                                                             |
+
 ## Deferred Beyond Current State
 
 - SQLite metadata storage.
 - Custom authorized runtime paths.
-- SyncTeX, texlab/LSP, collaboration and Git.
+- Reverse SyncTeX UI, persistent texlab/LSP diagnostics/hovers, collaboration and Git.
 - Security audit, packaging, signing, installers and updater.
 
 The remote HTTP compiler remains active for browser builds. Desktop local compilation is implemented; local macOS TeX CLI smoke passed, but installed-app compile smoke and real-machine verification across Windows/Linux remain required before any operating system is declared release-supported.
