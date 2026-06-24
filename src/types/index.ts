@@ -78,6 +78,21 @@ export type SyncConflict = {
   createdAt: number;
 };
 
+export type SyncTexArtifact = {
+  id: string;
+  output: string;
+};
+
+export type SyncTexLocation = {
+  page: number;
+  x: number;
+  y: number;
+  h?: number;
+  v?: number;
+  width?: number;
+  height?: number;
+};
+
 export type CompileResult = {
   success: boolean;
   pdfBytes?: Uint8Array;
@@ -85,6 +100,7 @@ export type CompileResult = {
   errors: CompileMessage[];
   warnings: CompileMessage[];
   durationMs: number;
+  syncTex?: SyncTexArtifact;
 };
 
 export type CompileMessage = {

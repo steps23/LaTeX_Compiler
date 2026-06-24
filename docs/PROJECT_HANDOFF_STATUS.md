@@ -1,6 +1,6 @@
 # Project Handoff Status
 
-Date: 2026-06-23
+Date: 2026-06-24
 Project: TeXForge / LaTeX_Compiler
 Repository: `/Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler`
 Reference worktree/prompt source: `/Users/stefano_ruggiero/Documents/LaTeX app/texforge-prompt-03`
@@ -11,7 +11,7 @@ The repository source files are aligned with the `texforge-prompt-03` reference 
 
 Status: `verificato in CI`
 
-Latest phase added: Prompt 6 local desktop compilation baseline — selected runtime wired to Tauri compile command.
+Latest phase added: Prompt 7 SyncTeX baseline — native compiles generate SyncTeX artifacts and expose bounded source-to-PDF lookup.
 
 ## What Has Been Done
 
@@ -39,7 +39,8 @@ Latest phase added: Prompt 6 local desktop compilation baseline — selected run
 - Per-project runtime overrides are implemented in `ProjectSettings.texRuntimeId`; omitted means inherit global, `null` means disabled for that project, and a string means project-specific detected runtime ID.
 - Per-project compile engine selection is implemented in `ProjectSettings.texCompileEngine` with the allowlist `auto`, `latexmk`, `pdflatex`, `xelatex`, `lualatex`.
 - Tauri runtime selection accepts only currently detected runtime IDs; arbitrary executable paths remain deferred.
-- Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, rejects oversized input/file sets, validates the project engine allowlist, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, supports cancellation through job IDs, uses file-backed stdout/stderr with capped log reads, reads size-capped `main.pdf` and removes the workspace.
+- Desktop compilation now uses `compile_latex_project`, writes a temporary workspace under Tauri app cache, rejects oversized input/file sets, validates the project engine allowlist, invokes an explicit detected TeX executable with fixed arguments via Rust `Command`, supports cancellation through job IDs, uses file-backed stdout/stderr with capped log reads, reads size-capped `main.pdf` and removes failed/transient workspaces.
+- Prompt 7 SyncTeX baseline is implemented: fixed TeX invocations pass `-synctex=1`, successful native compiles retain app-cache artifacts by validated job ID, and `query_synctex_forward` runs detected `synctex view` with validated project-relative input paths and 1-based line numbers.
 - Browser compilation continues to use the HTTP fallback compiler.
 - LaTeX Environment screen is available at `#/tex-environment` from the dashboard and can select/clear global runtime plus set project inherit/disable/override behavior when a project is open.
 
@@ -94,7 +95,7 @@ Evidence:
 - Prettier format check passed.
 - TypeScript typecheck passed.
 - ESLint passed.
-- Vitest passed: 17 test files, 64 tests.
+- Vitest passed: 18 test files, 65 tests.
 - Vite/web build passed.
 - Server bundle build passed.
 
@@ -125,7 +126,7 @@ Evidence:
 
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml` passed.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` passed.
-- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 13 tests.
+- `cargo test --manifest-path src-tauri/Cargo.toml` passed: 14 tests.
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed.
 
 ### Git State
@@ -138,12 +139,14 @@ Result before this update: clean at `b4708832`.
 
 Current intended changes:
 
-- `src-tauri/src/lib.rs` adds `compile_latex_project`, `cancel_latex_compile`, bounded compile workspaces, explicit TeX process invocation, engine allowlist validation, timeout/cancellation/input/file/log/PDF caps, non-`latexmk` two-pass fallback and native compile result/limit tests.
+- `src-tauri/src/lib.rs` adds `compile_latex_project`, `cancel_latex_compile`, `query_synctex_forward`, bounded compile workspaces/artifacts, explicit TeX/SyncTeX process invocation, engine allowlist validation, timeout/cancellation/input/file/log/PDF caps, non-`latexmk` two-pass fallback and native compile/SyncTeX result/limit tests.
 - `src/features/compiler/index.ts` selects native local compiler in Tauri and HTTP fallback in browser.
 - `src/features/compiler/NativeLocalCompiler.ts` adds the desktop compiler adapter.
 - `src/features/compiler/NativeLocalCompiler.test.ts` covers native compile IPC payloads and PDF byte hydration.
 - `src/components/Header.tsx` passes the current project to compiler resolution.
-- `src/types/index.ts` allows compiler adapters to receive optional project context and defines `TexCompileEngine`.
+- `src/types/index.ts` allows compiler adapters to receive optional project context and defines `TexCompileEngine`, `SyncTexArtifact` and `SyncTexLocation`.
+- `src/utils/syncTex.ts` adds the frontend bounded SyncTeX forward-lookup adapter.
+- `src/utils/syncTex.test.ts` covers native IPC payload shaping.
 - `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_STATUS.md` and this file document the local desktop compilation baseline.
 
 ## External Documentation Checked
@@ -161,6 +164,7 @@ Authoritative/current docs were checked through Context7:
   - command access from Rust through `AppHandle`
   - runtime-authority/capability denial model
   - Rust `Command` process invocation and timeout handling
+  - SyncTeX CLI `view` semantics from local TeX Live `synctex help view` output
   - Vite build/code-splitting guidance for known bundle warnings
 
 Relevant alignment:
@@ -193,8 +197,8 @@ The app is not yet a fully offline production desktop LaTeX editor. Deferred or 
 - Custom authorized runtime paths.
 - Real distribution verification on Windows/Linux and installed-app smoke tests.
 - Offline/local LaTeX compilation.
-- SyncTeX support.
-- PDF source/preview synchronization.
+- Reverse PDF-to-source SyncTeX UI.
+- PDF source/preview synchronization beyond source-to-PDF lookup primitive.
 - texlab/LSP integration.
 - SQLite metadata storage; current desktop metadata uses JSON manifests in app-data project directories.
 - Collaboration features.
@@ -317,5 +321,5 @@ Likely scope:
 ## Last Maintainer Notes
 
 - Rust exists at `~/.cargo/bin`; shell did not include it by default. Use `PATH="$HOME/.cargo/bin:$PATH"` for Rust gates or fix shell profile.
-- Current source alignment with `texforge-prompt-03` means future work should start from `/Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler` as canonical repo, not copy files blindly from prompt worktree.
+- Current source alignment now extends beyond `texforge-prompt-03`; future work should start from `/Users/stefano_ruggiero/Documents/GitHub/LaTeX_Compiler` as canonical repo, not copy files blindly from prompt worktree.
 - This handoff file intentionally records local verification only. It does not claim CI or real-machine platform verification.

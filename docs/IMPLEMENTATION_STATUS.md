@@ -50,6 +50,17 @@ CI evidence: public run `28040181526` passed frontend gates plus Tauri format, c
 | Compilation hardening                | verificato localmente | App-cache workspace, timeout/cancellation, input/file/log/PDF caps, file-backed stdout/stderr and cleanup are implemented                 |
 | macOS local TeX CLI smoke            | verificato localmente | MacTeX/TeX Live 2025 `latexmk` and `pdflatex` are present; fixture CLI compile produced a PDF locally                                     |
 
+## Prompt 7 Baseline
+
+| Area                         | Stato                 | Evidence                                                                                                                          |
+| ---------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| SyncTeX generation           | verificato localmente | Native compile command passes `-synctex=1` to `latexmk`, `pdflatex`, `xelatex` and `lualatex` fixed-argument invocations          |
+| SyncTeX artifact boundary    | verificato localmente | Successful desktop compiles retain app-cache `main.pdf`/`main.synctex(.gz)` artifacts by validated job ID; failed workspaces drop |
+| SyncTeX forward lookup IPC   | verificato localmente | `query_synctex_forward` validates artifact ID, project-relative input path and 1-based line; Rust parses `synctex view` records   |
+| Frontend SyncTeX adapter     | verificato localmente | `src/utils/syncTex.ts` calls the bounded native command in Tauri and returns `null` in browser mode                               |
+| Reverse PDF-to-source lookup | non verificato        | Deferred; no PDF canvas click mapping to `synctex edit` yet                                                                       |
+| Installed-app SyncTeX smoke  | non verificato        | Deferred; CLI documentation and unit/contract tests only                                                                          |
+
 ## Deferred Beyond Current State
 
 - SQLite metadata storage.

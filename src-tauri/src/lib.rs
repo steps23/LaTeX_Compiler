@@ -22,6 +22,7 @@ const FILE_MANIFEST_FILE: &str = "files.json";
 const PROJECT_FILES_DIR: &str = "files";
 const TEX_RUNTIME_SELECTION_FILE: &str = "tex-runtime-selection.json";
 const COMPILE_WORK_DIR: &str = "compile-workspaces";
+const COMPILE_ARTIFACT_DIR: &str = "compile-artifacts";
 const COMPILE_TIMEOUT: Duration = Duration::from_secs(45);
 const MAX_COMPILE_LOG_BYTES: u64 = 1_000_000;
 const MAX_COMPILE_INPUT_BYTES: u64 = 200 * 1024 * 1024;
@@ -100,6 +101,35 @@ struct NativeCompileResult {
     errors: Vec<NativeCompileMessage>,
     warnings: Vec<NativeCompileMessage>,
     duration_ms: u64,
+    sync_tex: Option<NativeSyncTexArtifact>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeSyncTexArtifact {
+    id: String,
+    output: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncTexForwardRequest {
+    artifact_id: String,
+    input_path: String,
+    line: u64,
+    column: Option<u64>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct SyncTexLocation {
+    page: u64,
+    x: f64,
+    y: f64,
+    h: Option<f64>,
+    v: Option<f64>,
+    width: Option<f64>,
+    height: Option<f64>,
 }
 
 #[tauri::command]
@@ -277,6 +307,7 @@ fn empty_compile_error(message: impl Into<String>, duration_ms: u64) -> NativeCo
         }],
         warnings: vec![],
         duration_ms,
+        sync_tex: None,
     }
 }
 
@@ -289,6 +320,22 @@ fn compile_workspace_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     fs::create_dir_all(&root)
         .map_err(|error| format!("failed to create compile cache directory: {error}"))?;
     Ok(root)
+}
+
+fn compile_artifact_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("failed to resolve app cache directory: {error}"))?
+        .join(COMPILE_ARTIFACT_DIR);
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("failed to create compile artifact directory: {error}"))?;
+    Ok(root)
+}
+
+fn compile_artifact_dir(app: &tauri::AppHandle, artifact_id: &str) -> Result<PathBuf, String> {
+    validate_id(artifact_id)?;
+    Ok(compile_artifact_root(app)?.join(artifact_id))
 }
 
 fn unique_compile_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -396,6 +443,7 @@ fn selected_compile_tool(
                     "-interaction=nonstopmode".into(),
                     "-halt-on-error".into(),
                     "-file-line-error".into(),
+                    "-synctex=1".into(),
                     request_safe_job_arg(),
                 ],
             ));
@@ -418,6 +466,7 @@ fn selected_compile_tool(
                     "-interaction=nonstopmode".into(),
                     "-halt-on-error".into(),
                     "-file-line-error".into(),
+                    "-synctex=1".into(),
                     request_safe_job_arg(),
                 ],
             ));
@@ -425,6 +474,22 @@ fn selected_compile_tool(
     }
 
     Err("selected TeX runtime has no available PDF compiler".into())
+}
+
+fn selected_runtime_tool(runtime_id: &str, tool_name: &str) -> Result<String, String> {
+    validate_id(runtime_id)?;
+    let diagnostic = tex_runtime::detect_tex_runtimes();
+    let runtime = diagnostic
+        .runtimes
+        .into_iter()
+        .find(|runtime| runtime.id == runtime_id)
+        .ok_or_else(|| "selected TeX runtime was not detected".to_string())?;
+    runtime
+        .tools
+        .into_iter()
+        .find(|tool| tool.name == tool_name && tool.status == tex_runtime::TexToolStatus::Available)
+        .map(|tool| tool.path)
+        .ok_or_else(|| format!("selected TeX runtime does not provide {tool_name}"))
 }
 
 fn request_safe_job_arg() -> String {
@@ -552,6 +617,62 @@ fn parse_compile_errors(raw_log: &str) -> Vec<NativeCompileMessage> {
     errors
 }
 
+fn parse_synctex_view_output(output: &str) -> Option<SyncTexLocation> {
+    let mut page = None;
+    let mut x = None;
+    let mut y = None;
+    let mut h = None;
+    let mut v = None;
+    let mut width = None;
+    let mut height = None;
+
+    for line in output.lines() {
+        if let Some((key, value)) = line.split_once(':') {
+            match key {
+                "Page" => page = value.trim().parse::<u64>().ok(),
+                "x" => x = value.trim().parse::<f64>().ok(),
+                "y" => y = value.trim().parse::<f64>().ok(),
+                "h" => h = value.trim().parse::<f64>().ok(),
+                "v" => v = value.trim().parse::<f64>().ok(),
+                "W" => width = value.trim().parse::<f64>().ok(),
+                "H" => height = value.trim().parse::<f64>().ok(),
+                _ => {}
+            }
+        }
+    }
+
+    Some(SyncTexLocation {
+        page: page?,
+        x: x?,
+        y: y?,
+        h,
+        v,
+        width,
+        height,
+    })
+}
+
+fn move_successful_compile_artifact(
+    app: &tauri::AppHandle,
+    artifact_id: &str,
+    runtime_id: &str,
+    work_dir: &std::path::Path,
+) -> Result<NativeSyncTexArtifact, String> {
+    let artifact_dir = compile_artifact_dir(app, artifact_id)?;
+    if artifact_dir.exists() {
+        fs::remove_dir_all(&artifact_dir)
+            .map_err(|error| format!("failed to replace old compile artifact: {error}"))?;
+    }
+    fs::rename(work_dir, &artifact_dir)
+        .map_err(|error| format!("failed to persist compile artifact: {error}"))?;
+    fs::write(artifact_dir.join("tex-runtime-id.txt"), runtime_id)
+        .map_err(|error| format!("failed to persist SyncTeX runtime metadata: {error}"))?;
+    Ok(NativeSyncTexArtifact {
+        id: artifact_id.to_string(),
+        output: "main.pdf".into(),
+    })
+}
+
 fn write_json_file(path: PathBuf, value: &Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -663,6 +784,18 @@ fn compile_latex_project(
         };
 
         if success && pdf_bytes.is_some() {
+            let sync_tex = if work_dir.join("main.synctex.gz").is_file()
+                || work_dir.join("main.synctex").is_file()
+            {
+                Some(move_successful_compile_artifact(
+                    &app,
+                    &request.job_id,
+                    runtime_id,
+                    &work_dir,
+                )?)
+            } else {
+                None
+            };
             Ok(NativeCompileResult {
                 success: true,
                 pdf_bytes,
@@ -670,6 +803,7 @@ fn compile_latex_project(
                 errors: vec![],
                 warnings: vec![],
                 duration_ms,
+                sync_tex,
             })
         } else {
             let errors = parse_compile_errors(&raw_log);
@@ -680,11 +814,14 @@ fn compile_latex_project(
                 errors,
                 warnings: vec![],
                 duration_ms,
+                sync_tex: None,
             })
         }
     })();
 
-    let _ = fs::remove_dir_all(&work_dir);
+    if work_dir.exists() {
+        let _ = fs::remove_dir_all(&work_dir);
+    }
     let _ = clear_compile_job(&registry, &request.job_id);
 
     match result {
@@ -702,6 +839,46 @@ fn cancel_latex_compile(
     job_id: String,
 ) -> Result<(), String> {
     mark_compile_job_cancelled(&registry, &job_id)
+}
+
+#[tauri::command]
+fn query_synctex_forward(
+    app: tauri::AppHandle,
+    request: SyncTexForwardRequest,
+) -> Result<Option<SyncTexLocation>, String> {
+    validate_id(&request.artifact_id)?;
+    if request.line == 0 {
+        return Err("SyncTeX line must be 1-based".into());
+    }
+    let input_path = validated_project_path(&request.input_path)?;
+    let artifact_dir = compile_artifact_dir(&app, &request.artifact_id)?;
+    let pdf_path = artifact_dir.join("main.pdf");
+    if !pdf_path.is_file() {
+        return Ok(None);
+    }
+    let runtime_id = fs::read_to_string(artifact_dir.join("tex-runtime-id.txt"))
+        .map_err(|error| format!("failed to read SyncTeX runtime metadata: {error}"))?;
+    let synctex_path = selected_runtime_tool(runtime_id.trim(), "synctex")?;
+    let input = format!(
+        "{}:{}:{}",
+        request.line,
+        request.column.unwrap_or(1).max(1),
+        input_path.to_string_lossy()
+    );
+    let output = Command::new(synctex_path)
+        .args(["view", "-i", input.as_str(), "-o", "main.pdf"])
+        .current_dir(&artifact_dir)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("failed to run SyncTeX: {error}"))?;
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    if !output.stderr.is_empty() {
+        text.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+    if !output.status.success() && !text.contains("SyncTeX result begin") {
+        return Err(format!("SyncTeX lookup failed: {}", text.trim()));
+    }
+    Ok(parse_synctex_view_output(&text))
 }
 
 #[tauri::command]
@@ -859,6 +1036,7 @@ pub fn run() {
             save_tex_runtime_selection,
             compile_latex_project,
             cancel_latex_compile,
+            query_synctex_forward,
             get_all_projects,
             get_project,
             save_project,
@@ -877,9 +1055,10 @@ mod tests {
     use super::{
         clear_compile_job, detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection,
         get_runtime_info, is_compile_job_cancelled, mark_compile_job_cancelled,
-        mark_compile_job_started, read_capped_text_file, validate_compile_engine,
-        validated_project_path, write_compile_workspace, CompileFilePayload, CompileJobRegistry,
-        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
+        mark_compile_job_started, parse_synctex_view_output, read_capped_text_file,
+        validate_compile_engine, validated_project_path, write_compile_workspace,
+        CompileFilePayload, CompileJobRegistry, CompileLatexRequest, StorageInfo,
+        STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -962,6 +1141,20 @@ mod tests {
         assert_eq!(info["rawLog"], "fixture");
         assert_eq!(info["errors"][0]["severity"], "error");
         assert_eq!(info["durationMs"], 12);
+        assert!(info["syncTex"].is_null());
+    }
+
+    #[test]
+    fn synctex_view_output_parses_first_location() {
+        let output = "SyncTeX result begin\nOutput:main.pdf\nPage:2\nx:171.128296\ny:134.764618\nh:133.768356\nv:134.764618\nW:343.711060\nH:6.918498\nSyncTeX result end";
+
+        let location = parse_synctex_view_output(output).expect("location should parse");
+
+        assert_eq!(location.page, 2);
+        assert_eq!(location.x, 171.128296);
+        assert_eq!(location.y, 134.764618);
+        assert_eq!(location.width, Some(343.711060));
+        assert_eq!(location.height, Some(6.918498));
     }
 
     #[test]
