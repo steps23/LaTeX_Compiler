@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Download,
+  AlertTriangle,
 } from "lucide-react";
 import { useEditorStore } from "../state/store";
 import { getCompiler } from "../features/compiler";
@@ -13,11 +14,17 @@ import { useState, useRef, useEffect } from "react";
 import { exportProjectZip } from "../utils/projects";
 import { RuntimeBadge } from "./RuntimeBadge";
 
+const waitForNextPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
 export function Header() {
   const {
     currentProject,
     files,
     isCompiling,
+    compileResult,
     setCompiling,
     setCompileResult,
     toggleLogs,
@@ -27,6 +34,7 @@ export function Header() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const compileFailed = compileResult ? !compileResult.success : false;
 
   useEffect(() => {
     if (isEditingTitle && inputRef.current) {
@@ -44,6 +52,7 @@ export function Header() {
 
     setCompiling(true);
     try {
+      await waitForNextPaint();
       await flushProject(currentProject.id);
       const compiler = await getCompiler();
       const result = await compiler.compile(
@@ -157,9 +166,20 @@ export function Header() {
         </button>
         <button
           onClick={toggleLogs}
-          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-sm flex items-center gap-2 transition-colors text-sm border border-zinc-700"
+          className={`px-3 py-1.5 rounded-sm flex items-center gap-2 transition-colors text-sm border ${
+            compileFailed
+              ? "bg-red-950/70 hover:bg-red-900 text-red-200 border-red-700 shadow-sm shadow-red-950/50"
+              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+          }`}
+          title={compileFailed ? "Compilation failed. Open logs." : "Open logs"}
         >
+          {compileFailed && <AlertTriangle className="w-4 h-4" />}
           Logs
+          {compileFailed && (
+            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              !
+            </span>
+          )}
         </button>
       </div>
     </div>

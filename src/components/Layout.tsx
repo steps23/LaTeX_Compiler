@@ -5,7 +5,7 @@ import { FileSidebar } from "../features/fileTree/FileSidebar";
 import { MonacoEditorRenderer } from "../features/editor/MonacoEditor";
 import { PdfViewer } from "../features/pdfViewer/PdfViewer";
 import { useEditorStore } from "../state/store";
-import { XCircle, Loader2 } from "lucide-react";
+import { XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 
 export function Layout() {
@@ -31,6 +31,8 @@ export function Layout() {
       navigate("/projects", { replace: true });
     }
   }, [projectId, navigate, openProject]);
+
+  const compileFailed = compileResult ? !compileResult.success : false;
 
   const handleLogClick = (
     file: string | undefined,
@@ -77,9 +79,20 @@ export function Layout() {
 
       {logsVisible && (
         <div className="h-48 shrink-0 bg-zinc-900 border-t border-zinc-800 flex flex-col z-20">
-          <div className="h-8 border-b border-zinc-800 flex items-center px-4 justify-between bg-zinc-800/50">
+          <div
+            className={`h-8 border-b flex items-center px-4 justify-between ${
+              compileFailed
+                ? "bg-red-950/40 border-red-900/70"
+                : "bg-zinc-800/50 border-zinc-800"
+            }`}
+          >
             <div className="flex gap-4 text-xs font-medium text-zinc-400 uppercase tracking-wider">
-              <button className="text-emerald-400">Logs</button>
+              <button
+                className={`flex items-center gap-1.5 ${compileFailed ? "text-red-300" : "text-emerald-400"}`}
+              >
+                {compileFailed && <AlertTriangle className="w-3.5 h-3.5" />}
+                Logs
+              </button>
               {compileResult && compileResult.errors.length > 0 && (
                 <button className="text-red-400">
                   Errors ({compileResult.errors.length})

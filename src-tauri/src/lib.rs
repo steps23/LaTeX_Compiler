@@ -156,6 +156,14 @@ struct LatexLspCompletion {
     insert_text: Option<String>,
 }
 
+#[derive(Debug)]
+struct SelectedCompileTool {
+    name: String,
+    path: String,
+    bin_dir: String,
+    args: Vec<String>,
+}
+
 #[tauri::command]
 fn get_runtime_info() -> RuntimeInfo {
     RuntimeInfo {
@@ -439,7 +447,7 @@ fn validate_compile_engine(engine: Option<&str>) -> Result<&str, String> {
 fn selected_compile_tool(
     runtime_id: &str,
     compile_engine: Option<&str>,
-) -> Result<(String, String, Vec<String>), String> {
+) -> Result<SelectedCompileTool, String> {
     let compile_engine = validate_compile_engine(compile_engine)?;
     validate_id(runtime_id)?;
     let diagnostic = tex_runtime::detect_tex_runtimes();
@@ -459,10 +467,11 @@ fn selected_compile_tool(
 
     if matches!(compile_engine, "auto" | "latexmk") {
         if let Some(path) = available_path("latexmk") {
-            return Ok((
-                "latexmk".into(),
+            return Ok(SelectedCompileTool {
+                name: "latexmk".into(),
                 path,
-                vec![
+                bin_dir: runtime.bin_dir.clone(),
+                args: vec![
                     "-pdf".into(),
                     "-interaction=nonstopmode".into(),
                     "-halt-on-error".into(),
@@ -470,7 +479,7 @@ fn selected_compile_tool(
                     "-synctex=1".into(),
                     request_safe_job_arg(),
                 ],
-            ));
+            });
         }
         if compile_engine == "latexmk" {
             return Err("selected TeX runtime does not provide latexmk".into());
@@ -483,17 +492,18 @@ fn selected_compile_tool(
     };
     for name in engine_candidates {
         if let Some(path) = available_path(name) {
-            return Ok((
-                name.into(),
+            return Ok(SelectedCompileTool {
+                name: name.into(),
                 path,
-                vec![
+                bin_dir: runtime.bin_dir.clone(),
+                args: vec![
                     "-interaction=nonstopmode".into(),
                     "-halt-on-error".into(),
                     "-file-line-error".into(),
                     "-synctex=1".into(),
                     request_safe_job_arg(),
                 ],
-            ));
+            });
         }
     }
 
@@ -518,6 +528,14 @@ fn selected_runtime_tool(runtime_id: &str, tool_name: &str) -> Result<String, St
 
 fn request_safe_job_arg() -> String {
     "-jobname=main".into()
+}
+
+fn compile_process_path_env(runtime_bin_dir: &str) -> String {
+    let separator = if cfg!(windows) { ";" } else { ":" };
+    match std::env::var("PATH") {
+        Ok(path) if !path.is_empty() => format!("{runtime_bin_dir}{separator}{path}"),
+        _ => runtime_bin_dir.to_string(),
+    }
 }
 
 fn read_capped_text_file(path: &std::path::Path, label: &str) -> Result<String, String> {
@@ -547,8 +565,7 @@ fn read_pdf_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
 }
 
 fn run_compile_process(
-    tool_path: &str,
-    args: &[String],
+    tool: &SelectedCompileTool,
     main_path: &str,
     work_dir: &std::path::Path,
     run_number: usize,
@@ -563,10 +580,11 @@ fn run_compile_process(
     let stderr = fs::File::create(&stderr_path)
         .map_err(|error| format!("failed to create compiler stderr log: {error}"))?;
 
-    let mut child = Command::new(tool_path)
-        .args(args)
+    let mut child = Command::new(&tool.path)
+        .args(&tool.args)
         .arg(main_path)
         .current_dir(work_dir)
+        .env("PATH", compile_process_path_env(&tool.bin_dir))
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
@@ -1061,9 +1079,9 @@ fn save_tex_runtime_selection(
 }
 
 #[tauri::command]
-fn compile_latex_project(
+async fn compile_latex_project(
     app: tauri::AppHandle,
-    registry: tauri::State<CompileJobRegistry>,
+    registry: tauri::State<'_, CompileJobRegistry>,
     request: CompileLatexRequest,
 ) -> Result<NativeCompileResult, String> {
     let start = Instant::now();
@@ -1078,22 +1096,20 @@ fn compile_latex_project(
     let work_dir = unique_compile_dir(&app)?;
     let result = (|| -> Result<NativeCompileResult, String> {
         write_compile_workspace(&work_dir, &request)?;
-        let (tool_name, tool_path, args) =
-            selected_compile_tool(runtime_id, request.compile_engine.as_deref())?;
-        let compile_runs = if tool_name == "latexmk" { 1 } else { 2 };
+        let tool = selected_compile_tool(runtime_id, request.compile_engine.as_deref())?;
+        let compile_runs = if tool.name == "latexmk" { 1 } else { 2 };
         let mut success = false;
         let mut raw_log = String::new();
         for run_number in 1..=compile_runs {
             let (run_success, run_log) = run_compile_process(
-                &tool_path,
-                &args,
+                &tool,
                 &request.main_path,
                 &work_dir,
                 run_number,
                 &registry,
                 &request.job_id,
             )?;
-            raw_log.push_str(&format!("\n--- {tool_name} run {run_number} ---\n"));
+            raw_log.push_str(&format!("\n--- {} run {run_number} ---\n", tool.name));
             raw_log.push_str(&run_log);
             success = run_success;
             if !run_success {
@@ -1124,7 +1140,10 @@ fn compile_latex_project(
             Ok(NativeCompileResult {
                 success: true,
                 pdf_bytes,
-                raw_log: format!("Local TeX compilation succeeded with {tool_name}.\n\n{raw_log}"),
+                raw_log: format!(
+                    "Local TeX compilation succeeded with {}.\n\n{raw_log}",
+                    tool.name
+                ),
                 errors: vec![],
                 warnings: vec![],
                 duration_ms,
@@ -1407,12 +1426,13 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_compile_job, detect_tex_runtimes, empty_compile_error, empty_tex_runtime_selection,
-        get_runtime_info, is_compile_job_cancelled, lsp_message, mark_compile_job_cancelled,
-        mark_compile_job_started, parse_lsp_completion_response, parse_lsp_messages,
-        parse_synctex_view_output, read_capped_text_file, validate_compile_engine,
-        validated_project_path, write_compile_workspace, CompileFilePayload, CompileJobRegistry,
-        CompileLatexRequest, StorageInfo, STORAGE_CONTRACT_VERSION,
+        clear_compile_job, compile_process_path_env, detect_tex_runtimes, empty_compile_error,
+        empty_tex_runtime_selection, get_runtime_info, is_compile_job_cancelled, lsp_message,
+        mark_compile_job_cancelled, mark_compile_job_started, parse_lsp_completion_response,
+        parse_lsp_messages, parse_synctex_view_output, read_capped_text_file,
+        validate_compile_engine, validated_project_path, write_compile_workspace,
+        CompileFilePayload, CompileJobRegistry, CompileLatexRequest, StorageInfo,
+        STORAGE_CONTRACT_VERSION,
     };
 
     #[test]
@@ -1483,6 +1503,13 @@ mod tests {
         assert_eq!(validate_compile_engine(None).unwrap(), "auto");
         assert_eq!(validate_compile_engine(Some("xelatex")).unwrap(), "xelatex");
         assert!(validate_compile_engine(Some("sh")).is_err());
+    }
+
+    #[test]
+    fn compile_process_path_prepends_runtime_bin_dir() {
+        let path = compile_process_path_env("/Library/TeX/texbin");
+
+        assert!(path.starts_with("/Library/TeX/texbin"));
     }
 
     #[test]

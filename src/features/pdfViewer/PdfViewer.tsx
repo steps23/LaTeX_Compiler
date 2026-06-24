@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEditorStore } from "../../state/store";
-import { ZoomIn, ZoomOut, Download, AlertTriangle } from "lucide-react";
+import {
+  ZoomIn,
+  ZoomOut,
+  Download,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -342,6 +348,31 @@ export function PdfViewer() {
     URL.revokeObjectURL(url);
   };
 
+  if (isCompiling && !compileResult?.pdfBytes) {
+    return (
+      <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-zinc-300 overflow-hidden relative">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.12),transparent_35%)]" />
+        <div className="relative flex flex-col items-center gap-4 rounded-2xl border border-emerald-900/50 bg-zinc-900/80 px-8 py-7 shadow-2xl shadow-emerald-950/20">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse" />
+            <Loader2 className="relative w-10 h-10 animate-spin text-emerald-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-emerald-100">
+              Compiling PDF…
+            </p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Running selected local TeX engine and preparing preview.
+            </p>
+          </div>
+          <div className="h-1.5 w-48 overflow-hidden rounded-full bg-zinc-800">
+            <div className="h-full w-1/2 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-emerald-500" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!compileResult?.success && !compileResult?.pdfBytes) {
     if (!currentProject) {
       return (
@@ -433,9 +464,16 @@ export function PdfViewer() {
       {/* PDF Content Area */}
       <div className="flex-1 overflow-auto bg-zinc-950 p-4 relative text-center">
         {isCompiling && (
-          <div className="absolute top-4 right-4 bg-zinc-800/90 text-zinc-200 border border-zinc-700 text-xs px-3 py-1.5 rounded-sm shadow border shadow-black/50 z-10 flex items-center gap-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            Compiling...
+          <div className="absolute inset-0 bg-zinc-950/45 backdrop-blur-[1px] z-10 flex items-center justify-center">
+            <div className="bg-zinc-900/95 text-zinc-100 border border-emerald-900/60 text-sm px-5 py-4 rounded-xl shadow-2xl shadow-black/60 flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+              <div>
+                <p className="font-medium">Compiling PDF…</p>
+                <p className="text-xs text-zinc-500">
+                  Preview updates when build finishes.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
